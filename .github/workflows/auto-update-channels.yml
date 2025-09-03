@@ -9,6 +9,9 @@ on:
 jobs:
   update-channels:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write    # 允许推送到仓库
+      actions: read      # 允许读取actions
     defaults:
       run:
         working-directory: ./Parser

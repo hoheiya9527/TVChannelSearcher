@@ -230,6 +230,11 @@ class BaseIPTVSearcher(ABC):
                     valid_channels = self._validate_links_concurrent(page_channels)
                     logger.info(f"[{self.site_name}] 第 {page} 页: {len(page_channels)} 个链接，{len(valid_channels)} 个有效")
                     all_channels.extend(valid_channels)
+                    
+                    # 如果已达到最少有效链接数要求，提前结束搜索
+                    if len(all_channels) >= self.config.min_valid_links:
+                        logger.info(f"[{self.site_name}] 已达到目标链接数({len(all_channels)}/{self.config.min_valid_links})，停止搜索")
+                        break
                 else:
                     all_channels.extend(page_channels)
                     
