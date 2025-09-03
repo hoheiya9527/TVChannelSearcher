@@ -74,7 +74,6 @@ jobs:
         echo "✅ 搜索完成"
     
     - name: 检查结果文件
-      id: check_result
       run: |
         if [ ! -f result.txt ]; then
           echo "❌ result.txt 文件未生成"
@@ -84,13 +83,15 @@ jobs:
           echo "❌ result.txt 文件为空"
           exit 1
         fi
+        
         line_count=$(wc -l < result.txt)
         file_size=$(du -h result.txt | cut -f1)
-        group_count=$(grep -c "^[^,]*,$" result.txt || echo "0")
+        group_count=$(grep -c "^[^,]*,$" result.txt 2>/dev/null || echo "0")
+        
         echo "📊 结果统计: 行数=$line_count, 大小=$file_size, 分组=$group_count"
-        echo "line_count=$line_count" >> $GITHUB_OUTPUT
-        echo "file_size=$file_size" >> $GITHUB_OUTPUT
-        echo "group_count=$group_count" >> $GITHUB_OUTPUT
+        echo "RESULT_LINE_COUNT=$line_count" >> $GITHUB_ENV
+        echo "RESULT_FILE_SIZE=$file_size" >> $GITHUB_ENV
+        echo "RESULT_GROUP_COUNT=$group_count" >> $GITHUB_ENV
     
     - name: 检查文件变化
       id: check_changes
@@ -107,21 +108,21 @@ jobs:
             echo "ℹ️ 文件无变化"
           fi
         fi
-        echo "has_changes=$has_changes" >> $GITHUB_OUTPUT
+        echo "HAS_CHANGES=$has_changes" >> $GITHUB_ENV
     
     - name: 配置Git
-      if: steps.check_changes.outputs.has_changes == 'true'
+      if: env.HAS_CHANGES == 'true'
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
     
     - name: 提交更新
-      if: steps.check_changes.outputs.has_changes == 'true'
+      if: env.HAS_CHANGES == 'true'
       run: |
         cd ..
         git add Parser/result.txt
         current_time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "频道分组: ${{ steps.check_result.outputs.group_count }} 个" -m "总链接数: ${{ steps.check_result.outputs.line_count }} 行" -m "文件大小: ${{ steps.check_result.outputs.file_size }}"
+        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "频道分组: $RESULT_GROUP_COUNT 个" -m "总链接数: $RESULT_LINE_COUNT 行" -m "文件大小: $RESULT_FILE_SIZE"
         git push
         echo "✅ 更新已提交"
 
