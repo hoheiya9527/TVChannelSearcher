@@ -53,7 +53,7 @@ class SearchConfig:
     min_resolution: int = 0        # 最小分辨率要求
     enable_validation: bool = True  # 是否启用链接验证
     enable_cache: bool = True      # 是否启用缓存
-    max_pages: int = 3            # 最大搜索页数
+    max_pages: int = 2            # 最大搜索页数 - 限制为2页
     concurrent_workers: int = 16   # 并发线程数 - 从6增加到16
     min_valid_links: int = 3       # 每个频道最少有效链接数 - 从5减少到3
 
@@ -265,11 +265,18 @@ class BaseIPTVSearcher(ABC):
         # 限制数量
         final_channels = unique_channels[:self.config.max_results]
         
+        # 检查搜索结果
+        if len(final_channels) == 0:
+            logger.warning(f"[{self.site_name}] 搜索完成: {keyword}, 未找到任何有效链接，将跳过该频道")
+        elif len(final_channels) < self.config.min_valid_links:
+            logger.info(f"[{self.site_name}] 搜索完成: {keyword}, 找到 {len(final_channels)} 个有效链接（目标 {self.config.min_valid_links} 个），保留所有结果")
+        else:
+            logger.info(f"[{self.site_name}] 搜索完成: {keyword}, 找到 {len(final_channels)} 个有效频道 [达标]")
+        
         # 缓存结果
         if self._search_cache:
             self._search_cache[keyword] = final_channels
         
-        logger.info(f"[{self.site_name}] 搜索完成: {keyword}, 找到 {len(final_channels)} 个有效频道")
         return final_channels
     
     def get_site_info(self) -> Dict[str, str]:
