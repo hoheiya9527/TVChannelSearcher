@@ -41,121 +41,39 @@ jobs:
     
     - name: 显示环境信息
       run: |
-        echo "Python版本: $(python --version)"
-        echo "当前目录内容:"
+        python --version
         ls -la
     
     - name: 检查必要文件
       run: |
-        echo "检查必要文件..."
         for file in LiveChannel.txt modular_batch_processor.py searcher_interface.py tonkiang_searcher.py run_processor.py; do
-          if [ ! -f "$file" ]; then
-            echo "❌ 缺少文件: $file"
-            exit 1
-          else
-            echo "✅ 找到文件: $file"
-          fi
+          [ -f "$file" ] || exit 1
         done
     
     - name: 备份原始文件
       run: |
-        if [ -f result.txt ]; then
-          cp result.txt result_backup.txt
-          echo "✅ 已备份 result.txt"
-        else
-          echo "ℹ️ result.txt 不存在，跳过备份"
-        fi
+        [ -f result.txt ] && cp result.txt result_backup.txt || true
     
     - name: 执行频道搜索
       run: |
-        echo "🚀 开始执行频道搜索..."
-        echo "开始时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "GitHub Runner IP信息:"
-        curl -s https://httpbin.org/ip || echo "无法获取IP信息"
-        echo ""
-        
-        # 方案：使用不同的GitHub Runner位置
-        echo "🌍 尝试使用不同地区的GitHub Runner"
-        
-        # 显示当前Runner的详细信息
-        echo "📍 当前Runner信息:"
-        echo "   - IP: $(curl -s https://httpbin.org/ip 2>/dev/null | grep -o '"origin": "[^"]*"' | cut -d'"' -f4 || echo 'unknown')"
-        echo "   - 时区: $(date)"
-        echo "   - DNS: $(nslookup tonkiang.us 2>/dev/null | grep 'Address:' | tail -1 || echo 'DNS解析失败')"
-        
-        # 尝试通过不同的DNS解析
-        echo "🔄 尝试不同的DNS解析策略"
-        
-        # GitHub Actions环境被拉黑，直接跳过搜索
-        echo "🚨 GitHub Actions环境被目标网站拉黑，无法进行实时搜索"
-        echo "💡 建议解决方案："
-        echo "   1. 使用本地环境执行: cd Parser && python run_processor.py"
-        echo "   2. 设置自托管Runner"
-        echo "   3. 使用其他CI/CD服务（如GitLab CI）"
-        echo ""
-        echo "⏭️  跳过搜索步骤，工作流结束"
-        
-        # 创建空的结果文件，避免后续步骤报错
-        touch result.txt
-        echo "# GitHub Actions环境限制" > result.txt
-        echo "# 请使用本地环境执行搜索" >> result.txt
-        echo "# 执行命令: cd Parser && python run_processor.py" >> result.txt
-        
-        exit 1  # 让工作流失败，不进行无意义的提交
-        
-        echo "✅ 搜索阶段完成"
+        export SEARCH_DELAY=5
+        export MAX_WORKERS=1
+        export RETRY_DELAY=20
+        timeout 1800 python run_processor.py
     
     - name: 检查结果文件并验证质量
       id: check_result
       run: |
-        if [ ! -f result.txt ]; then
-          echo "❌ result.txt 文件未生成"
-          exit 1
-        fi
-        if [ ! -s result.txt ]; then
-          echo "❌ result.txt 文件为空"
-          exit 1
-        fi
+        [ -f result.txt ] && [ -s result.txt ] || exit 1
         
-        line_count=$(wc -l < result.txt)
-        file_size=$(du -h result.txt | cut -f1)
+        valid_channel_count=$(grep -v "^[^,]*,$" result.txt | wc -l 2>/dev/null || echo "0")
         group_count=$(grep -c "^[^,]*,$" result.txt 2>/dev/null || echo "0")
         
-        # 计算有效频道链接数（排除分组标题行）
-        valid_channel_count=$(grep -v "^[^,]*,$" result.txt | wc -l 2>/dev/null || echo "0")
-        
-        # 确保变量值不为空
-        line_count=${line_count:-0}
-        file_size=${file_size:-"0B"}
-        group_count=${group_count:-0}
-        valid_channel_count=${valid_channel_count:-0}
-        
-        echo "📊 结果统计: 总行数=$line_count, 文件大小=$file_size, 分组数=$group_count, 有效频道=$valid_channel_count"
-        
-        # 质量检查标准
-        MIN_CHANNELS=10  # 最少10个有效频道就行
-        MIN_GROUPS=2     # 最少2个分组
-        
-        echo "🔍 质量检查标准（降低要求）"
-        
-        echo "🔍 质量检查..."
-        echo "- 有效频道数: $valid_channel_count (最低要求: $MIN_CHANNELS)"
-        echo "- 分组数: $group_count (最低要求: $MIN_GROUPS)"
-        
-        # 检查是否满足最低要求
-        if [ "$valid_channel_count" -lt "$MIN_CHANNELS" ]; then
-          echo "❌ 有效频道数不足 ($valid_channel_count < $MIN_CHANNELS)，跳过提交"
+        if [ "$valid_channel_count" -lt 10 ] || [ "$group_count" -lt 2 ]; then
           echo "QUALITY_CHECK=false" >> $GITHUB_ENV
           exit 0
         fi
         
-        if [ "$group_count" -lt "$MIN_GROUPS" ]; then
-          echo "❌ 分组数不足 ($group_count < $MIN_GROUPS)，跳过提交"
-          echo "QUALITY_CHECK=false" >> $GITHUB_ENV
-          exit 0
-        fi
-        
-        echo "✅ 质量检查通过"
         echo "QUALITY_CHECK=true" >> $GITHUB_ENV
         echo "VALID_CHANNELS=$valid_channel_count" >> $GITHUB_ENV
         echo "GROUPS=$group_count" >> $GITHUB_ENV
@@ -164,45 +82,29 @@ jobs:
       id: check_changes
       if: env.QUALITY_CHECK == 'true'
       run: |
-        has_changes="false"
-        if [ ! -f result_backup.txt ]; then
-          echo "ℹ️ 首次运行"
-          has_changes="true"
+        if [ ! -f result_backup.txt ] || ! cmp -s result.txt result_backup.txt; then
+          echo "HAS_CHANGES=true" >> $GITHUB_ENV
         else
-          if ! cmp -s result.txt result_backup.txt; then
-            echo "🔄 文件有变化"
-            has_changes="true"
-          else
-            echo "ℹ️ 文件无变化"
-          fi
+          echo "HAS_CHANGES=false" >> $GITHUB_ENV
         fi
-        echo "HAS_CHANGES=$has_changes" >> $GITHUB_ENV
     
     - name: 配置Git
       if: env.QUALITY_CHECK == 'true' && env.HAS_CHANGES == 'true'
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
+        git config user.email "action@github.com"
+        git config user.name "GitHub Action"
     
     - name: 提交更新
       if: env.QUALITY_CHECK == 'true' && env.HAS_CHANGES == 'true'
       run: |
-        cd ..
         git add Parser/result.txt
-        current_time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        
-        # 使用已验证的统计信息
-        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "✅ 质量检查通过" -m "有效频道: ${VALID_CHANNELS} 个" -m "频道分组: ${GROUPS} 个"
+        git commit -m "🔄 自动更新IPTV频道列表 - ${{ env.VALID_CHANNELS }}个频道，${{ env.GROUPS }}个分组"
         git push
-        echo "✅ 更新已提交"
     
     - name: 质量检查失败处理
       if: env.QUALITY_CHECK == 'false'
       run: |
-        echo "⚠️ 本次更新未提交，原因："
-        echo "- 解析到的有效频道数或分组数不足"
-        echo "- 建议检查搜索器状态或网络连接"
-        echo "- 下次定时任务将重新尝试"
+        echo "质量检查未通过，跳过提交"
         exit 0
 
 env:
