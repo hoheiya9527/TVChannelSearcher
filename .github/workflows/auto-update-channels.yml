@@ -2,14 +2,9 @@ name: 自动更新IPTV频道列表
 
 on:
   schedule:
-    - cron: '0 22 * * *'
-    - cron: '0 8 * * *'
-  workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths: 
-      - 'Parser/**'
-      - '.github/workflows/**'
+    - cron: '0 22 * * *'  # 每天22:00 UTC执行
+    - cron: '0 8 * * *'   # 每天08:00 UTC执行
+  workflow_dispatch:      # 允许手动触发
 
 jobs:
   update-channels:
@@ -88,10 +83,15 @@ jobs:
         file_size=$(du -h result.txt | cut -f1)
         group_count=$(grep -c "^[^,]*,$" result.txt 2>/dev/null || echo "0")
         
+        # 确保变量值不为空
+        line_count=${line_count:-0}
+        file_size=${file_size:-"0B"}
+        group_count=${group_count:-0}
+        
         echo "📊 结果统计: 行数=$line_count, 大小=$file_size, 分组=$group_count"
-        echo "RESULT_LINE_COUNT=$line_count" >> $GITHUB_ENV
-        echo "RESULT_FILE_SIZE=$file_size" >> $GITHUB_ENV
-        echo "RESULT_GROUP_COUNT=$group_count" >> $GITHUB_ENV
+        echo "RESULT_LINE_COUNT=${line_count}" >> $GITHUB_ENV
+        echo "RESULT_FILE_SIZE=${file_size}" >> $GITHUB_ENV
+        echo "RESULT_GROUP_COUNT=${group_count}" >> $GITHUB_ENV
     
     - name: 检查文件变化
       id: check_changes
@@ -108,7 +108,7 @@ jobs:
             echo "ℹ️ 文件无变化"
           fi
         fi
-        echo "HAS_CHANGES=$has_changes" >> $GITHUB_ENV
+        echo "HAS_CHANGES=${has_changes}" >> $GITHUB_ENV
     
     - name: 配置Git
       if: env.HAS_CHANGES == 'true'
