@@ -1,7 +1,7 @@
 #央视频道
-CCTV1 
-CCTV2 
-CCTV3 
+CCTV-1 
+CCTV-2 
+CCTV-3 
 
 
 
