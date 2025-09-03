@@ -70,7 +70,7 @@ jobs:
       run: |
         echo "🚀 开始执行频道搜索..."
         echo "开始时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        timeout 1800 python run_processor.py
+        timeout 5400 python run_processor.py
         echo "✅ 搜索完成"
     
     - name: 检查结果文件
