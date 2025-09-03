@@ -1,0 +1,19 @@
+name:  清理旧任务
+
+on:
+  schedule:
+    - cron: '0 14 * * 0' # 每周日午夜运行一次
+  workflow_dispatch: # 也允许手动触发
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean up runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          # 删除除最近 5 次之外的所有运行记录
+          retain_days: 0
+          keep_minimum_runs: 6
+          # 可选：指定具体的工作流文件名
+          # workflow_file_name: example.yml
