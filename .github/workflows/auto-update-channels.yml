@@ -88,10 +88,30 @@ jobs:
         
         # 方法1: 直接IP访问（绕过DNS）
         echo "🎯 方法1: 尝试直接IP访问..."
-        TARGET_IP=$(nslookup tonkiang.us 8.8.8.8 2>/dev/null | grep 'Address:' | tail -1 | awk '{print $2}' || echo "")
         
-        if [ -n "$TARGET_IP" ]; then
-          echo "   获取到IP: $TARGET_IP"
+        # 尝试多种方式获取IPv4地址
+        TARGET_IP=""
+        
+        # 方式1: 使用dig命令（优先IPv4）
+        if command -v dig >/dev/null 2>&1; then
+          TARGET_IP=$(dig +short A tonkiang.us @8.8.8.8 2>/dev/null | head -1)
+          echo "   dig解析结果: $TARGET_IP"
+        fi
+        
+        # 方式2: 使用nslookup（过滤IPv4）
+        if [ -z "$TARGET_IP" ]; then
+          TARGET_IP=$(nslookup tonkiang.us 8.8.8.8 2>/dev/null | grep 'Address:' | awk '{print $2}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          echo "   nslookup解析结果: $TARGET_IP"
+        fi
+        
+        # 方式3: 使用host命令
+        if [ -z "$TARGET_IP" ] && command -v host >/dev/null 2>&1; then
+          TARGET_IP=$(host tonkiang.us 8.8.8.8 2>/dev/null | grep 'has address' | head -1 | awk '{print $4}')
+          echo "   host解析结果: $TARGET_IP"
+        fi
+        
+        if [ -n "$TARGET_IP" ] && [[ "$TARGET_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "   ✅ 获取到IPv4地址: $TARGET_IP"
           export TARGET_HOST_IP="$TARGET_IP"
           export SEARCH_DELAY=2
           export MAX_WORKERS=1
@@ -103,6 +123,8 @@ jobs:
           else
             echo "❌ 直接IP访问失败"
           fi
+        else
+          echo "   ❌ 无法获取有效的IPv4地址"
         fi
         
         # 方法2: 使用不同的User-Agent策略
