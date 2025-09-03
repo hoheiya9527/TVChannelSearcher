@@ -600,17 +600,17 @@ def main():
         print(f"  - {name}")
     print()
     
-    # 创建配置
+    # 创建配置 - 高效模式
     config = ProcessorConfig(
         searcher_name="tonkiang",           # 默认使用 tonkiang 搜索器
         max_results_per_channel=10,         # 每频道最大10个链接
-        search_timeout=15,                  # 15秒搜索超时
+        search_timeout=10,                  # 10秒搜索超时（从15秒减少）
         min_resolution=0,                   # 不限制分辨率
-        enable_validation=True,             # 启用链接验证（已调整为更宽松）
+        enable_validation=True,             # 启用快速链接验证
         enable_cache=True,                  # 启用缓存
-        concurrent_groups=2,                # 2个分组并发
-        max_workers_per_group=4,            # 每分组4个并发
-        min_valid_links=3                   # 改为3个有效链接就够了（加快速度）
+        concurrent_groups=3,                # 3个分组并发（从2增加）
+        max_workers_per_group=8,            # 每分组8个并发（从4增加）
+        min_valid_links=3                   # 3个有效链接就够了（快速模式）
     )
     
     # 创建并运行处理器

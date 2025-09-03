@@ -49,13 +49,13 @@ class IPTVChannel:
 class SearchConfig:
     """搜索配置类"""
     max_results: int = 10           # 最大结果数
-    timeout: int = 30              # 超时时间(秒)
+    timeout: int = 10              # 超时时间(秒) - 从30减少到10
     min_resolution: int = 0        # 最小分辨率要求
     enable_validation: bool = True  # 是否启用链接验证
     enable_cache: bool = True      # 是否启用缓存
     max_pages: int = 3            # 最大搜索页数
-    concurrent_workers: int = 6    # 并发线程数
-    min_valid_links: int = 5       # 每个频道最少有效链接数，达到后停止验证
+    concurrent_workers: int = 16   # 并发线程数 - 从6增加到16
+    min_valid_links: int = 3       # 每个频道最少有效链接数 - 从5减少到3
 
 
 class BaseIPTVSearcher(ABC):
@@ -142,8 +142,8 @@ class BaseIPTVSearcher(ABC):
             return channels[:needed]  # 如果不验证，也返回限定数量
         
         valid_channels = []
-        # 限制并发数，避免过高并发导致问题
-        max_workers = min(self.config.concurrent_workers, len(channels), 8)
+        # 增加并发数，提高验证效率
+        max_workers = min(self.config.concurrent_workers, len(channels), 16)  # 从8增加到16
         target_count = remaining_needed if remaining_needed is not None else self.config.min_valid_links
         
         logger.info(f"[{self.site_name}] 开始并发验证 {len(channels)} 个链接 (目标: {target_count} 个有效链接)")
@@ -158,7 +158,7 @@ class BaseIPTVSearcher(ABC):
                 
                 # 收集验证结果，达到目标数量后停止
                 completed_count = 0
-                for future in as_completed(future_to_channel, timeout=30):  # 总超时30秒
+                for future in as_completed(future_to_channel, timeout=10):  # 总超时10秒（从30秒减少到10秒）
                     channel = future_to_channel[future]
                     completed_count += 1
                     
