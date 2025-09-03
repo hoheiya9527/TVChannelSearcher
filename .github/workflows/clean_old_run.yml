@@ -1,19 +1,22 @@
-name:  清理旧任务
+name: 清理自动更新频道运行记录
 
 on:
   schedule:
-    - cron: '0 14 * * 0' # 每周日午夜运行一次
+    - cron: '0 2 * * 1' # 每周一凌晨2点运行一次
   workflow_dispatch: # 也允许手动触发
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
     steps:
-      - name: Clean up runs
+      - name: 清理 auto-update-channels 运行记录
         uses: Mattraks/delete-workflow-runs@v2
         with:
-          # 删除除最近 5 次之外的所有运行记录
+          # 指定要清理的工作流文件（只删除运行记录，不删除工作流文件本身）
+          workflow_file_name: auto-update-channels.yml
+          # 保留最近的3次运行记录
           retain_days: 0
-          keep_minimum_runs: 6
-          # 可选：指定具体的工作流文件名
-          # workflow_file_name: example.yml
+          keep_minimum_runs: 3
