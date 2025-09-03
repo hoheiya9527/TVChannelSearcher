@@ -2,8 +2,8 @@ name: 自动更新IPTV频道列表
 
 on:
   schedule:
-    - cron: '0 22 * * *'  # UTC 22:00（北京时间06:00）
-    - cron: '0 8 * * *'   # UTC 08:00（北京时间16:00）
+    - cron: '0 22 * * *'
+    - cron: '0 8 * * *'
   workflow_dispatch:
   push:
     branches: [ main ]
@@ -19,52 +19,45 @@ jobs:
         working-directory: ./Parser
     
     steps:
-    - name: 📥 检出代码
+    - name: 检出代码
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
     
-    - name: 🐍 设置Python环境
+    - name: 设置Python环境
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
         cache: 'pip'
     
-    - name: 📦 安装依赖包
+    - name: 安装依赖包
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then
           pip install -r requirements.txt
         else
-          echo "安装默认依赖"
           pip install requests beautifulsoup4 lxml
         fi
     
-    - name: ℹ️ 显示环境信息
+    - name: 显示环境信息
       run: |
         echo "Python版本: $(python --version)"
         echo "当前目录内容:"
         ls -la
     
-    - name: 🔍 检查必要文件
+    - name: 检查必要文件
       run: |
         echo "检查必要文件..."
-        files=("LiveChannel.txt" "modular_batch_processor.py" "searcher_interface.py" "tonkiang_searcher.py" "run_processor.py")
-        missing_files=()
-        for file in "${files[@]}"; do
+        for file in LiveChannel.txt modular_batch_processor.py searcher_interface.py tonkiang_searcher.py run_processor.py; do
           if [ ! -f "$file" ]; then
-            missing_files+=("$file")
+            echo "❌ 缺少文件: $file"
+            exit 1
           else
             echo "✅ 找到文件: $file"
           fi
         done
-        if [ ${#missing_files[@]} -ne 0 ]; then
-          echo "❌ 缺少文件:"
-          printf '%s\n' "${missing_files[@]}"
-          exit 1
-        fi
     
-    - name: 💾 备份原始文件
+    - name: 备份原始文件
       run: |
         if [ -f result.txt ]; then
           cp result.txt result_backup.txt
@@ -73,22 +66,14 @@ jobs:
           echo "ℹ️ result.txt 不存在，跳过备份"
         fi
     
-    - name: 🔍 执行频道搜索
+    - name: 执行频道搜索
       run: |
         echo "🚀 开始执行频道搜索..."
         echo "开始时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        timeout 1800 python run_processor.py || {
-          exit_code=$?
-          if [ $exit_code -eq 124 ]; then
-            echo "执行超时（30分钟）"
-          else
-            echo "执行失败，退出码: $exit_code"
-          fi
-          exit $exit_code
-        }
+        timeout 1800 python run_processor.py
         echo "✅ 搜索完成"
     
-    - name: 📊 检查结果文件
+    - name: 检查结果文件
       id: check_result
       run: |
         if [ ! -f result.txt ]; then
@@ -102,53 +87,41 @@ jobs:
         line_count=$(wc -l < result.txt)
         file_size=$(du -h result.txt | cut -f1)
         group_count=$(grep -c "^[^,]*,$" result.txt || echo "0")
-        echo "📊 结果文件统计:"
-        echo "- 总行数: $line_count"
-        echo "- 文件大小: $file_size"
-        echo "- 频道分组: $group_count"
+        echo "📊 结果统计: 行数=$line_count, 大小=$file_size, 分组=$group_count"
         echo "line_count=$line_count" >> $GITHUB_OUTPUT
         echo "file_size=$file_size" >> $GITHUB_OUTPUT
         echo "group_count=$group_count" >> $GITHUB_OUTPUT
     
-    - name: 🔄 检查文件变化
+    - name: 检查文件变化
       id: check_changes
       run: |
         has_changes="false"
         if [ ! -f result_backup.txt ]; then
-          echo "ℹ️ 首次运行，没有备份文件"
+          echo "ℹ️ 首次运行"
           has_changes="true"
         else
-          if ! diff -q <(grep -v "^更新时间" result.txt) <(grep -v "^更新时间" result_backup.txt) > /dev/null; then
-            echo "🔄 检测到文件变化"
+          if ! cmp -s result.txt result_backup.txt; then
+            echo "🔄 文件有变化"
             has_changes="true"
           else
-            echo "ℹ️ 文件内容无变化"
+            echo "ℹ️ 文件无变化"
           fi
         fi
         echo "has_changes=$has_changes" >> $GITHUB_OUTPUT
     
-    - name: ⚙️ 配置Git用户
+    - name: 配置Git
       if: steps.check_changes.outputs.has_changes == 'true'
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
     
-    - name: 📤 提交更新
+    - name: 提交更新
       if: steps.check_changes.outputs.has_changes == 'true'
       run: |
         cd ..
         git add Parser/result.txt
         current_time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        commit_message="🔄 自动更新IPTV频道列表 - ${current_time}
-
-📊 更新统计:
-- 频道分组: ${{ steps.check_result.outputs.group_count }} 个
-- 总链接数: ${{ steps.check_result.outputs.line_count }} 行  
-- 文件大小: ${{ steps.check_result.outputs.file_size }}
-- 更新时间: ${current_time}
-
-🤖 此提交由 GitHub Actions 自动生成"
-        git commit -m "$commit_message"
+        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "频道分组: ${{ steps.check_result.outputs.group_count }} 个" -m "总链接数: ${{ steps.check_result.outputs.line_count }} 行" -m "文件大小: ${{ steps.check_result.outputs.file_size }}"
         git push
         echo "✅ 更新已提交"
 
