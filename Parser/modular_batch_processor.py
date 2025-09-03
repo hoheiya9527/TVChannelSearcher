@@ -186,13 +186,15 @@ class ResultFormatter:
         self.domain_processor = domain_processor
     
     def write_results_to_file(self, all_results: Dict[str, Dict[str, List[IPTVChannel]]], 
-                            output_file: str = "result.txt") -> int:
+                            output_file: str = "result.txt", 
+                            original_groups: List[ChannelGroup] = None) -> int:
         """
-        将结果写入文件，按域名频率排序，并在第一个频道前添加时间戳频道
+        将结果写入文件，按输入文件顺序排序，并在第一个频道前添加时间戳频道
         
         Args:
             all_results: 所有搜索结果
             output_file: 输出文件名
+            original_groups: 原始频道分组列表（用于保持顺序）
             
         Returns:
             int: 总的有效链接数
@@ -210,30 +212,69 @@ class ResultFormatter:
             with open(output_file, 'w', encoding='utf-8') as f:
                 is_first_group = True
                 
-                for group_name, group_channels in all_results.items():
-                    # 写入分组标题
-                    f.write(f"{group_name},#genre#\n")
-                    
-                    # 在第一个分组的第一个频道前添加时间戳频道
-                    if is_first_group and first_channel_url:
-                        f.write(f"{timestamp_channel_name},{first_channel_url}\n")
-                        total_links += 1
-                        logger.info(f"✨ 添加时间戳频道: {timestamp_channel_name}")
-                        is_first_group = False
-                    
-                    for channel_name, channels in group_channels.items():
-                        if channels:
-                            # 如果有域名处理器，按频率排序
-                            if self.domain_processor:
-                                channels = self.domain_processor.sort_channels_by_domain_frequency(channels)
+                # 如果有原始分组信息，按照原始顺序输出
+                if original_groups:
+                    for group in original_groups:
+                        group_name = group.name
+                        
+                        # 检查该分组是否有结果
+                        if group_name not in all_results:
+                            continue
                             
-                            # 写入频道链接
-                            for channel in channels:
-                                f.write(f"{channel.name},{channel.url}\n")
-                                total_links += 1
-                        else:
-                            # 即使没有链接也写入频道名（方便调试）
-                            f.write(f"{channel_name},#无有效链接\n")
+                        group_channels = all_results[group_name]
+                        
+                        # 写入分组标题
+                        f.write(f"{group_name},#genre#\n")
+                        
+                        # 在第一个分组的第一个频道前添加时间戳频道
+                        if is_first_group and first_channel_url:
+                            f.write(f"{timestamp_channel_name},{first_channel_url}\n")
+                            total_links += 1
+                            logger.info(f"✨ 添加时间戳频道: {timestamp_channel_name}")
+                            is_first_group = False
+                        
+                        # 按照输入文件中的频道顺序输出
+                        for channel_name in group.channels:
+                            if channel_name in group_channels:
+                                channels = group_channels[channel_name]
+                                if channels:
+                                    # 如果有域名处理器，按频率排序
+                                    if self.domain_processor:
+                                        channels = self.domain_processor.sort_channels_by_domain_frequency(channels)
+                                    
+                                    # 写入频道链接
+                                    for channel in channels:
+                                        f.write(f"{channel.name},{channel.url}\n")
+                                        total_links += 1
+                                else:
+                                    # 即使没有链接也写入频道名（方便调试）
+                                    f.write(f"{channel_name},#无有效链接\n")
+                else:
+                    # 回退到原来的逻辑（如果没有原始分组信息）
+                    for group_name, group_channels in all_results.items():
+                        # 写入分组标题
+                        f.write(f"{group_name},#genre#\n")
+                        
+                        # 在第一个分组的第一个频道前添加时间戳频道
+                        if is_first_group and first_channel_url:
+                            f.write(f"{timestamp_channel_name},{first_channel_url}\n")
+                            total_links += 1
+                            logger.info(f"✨ 添加时间戳频道: {timestamp_channel_name}")
+                            is_first_group = False
+                        
+                        for channel_name, channels in group_channels.items():
+                            if channels:
+                                # 如果有域名处理器，按频率排序
+                                if self.domain_processor:
+                                    channels = self.domain_processor.sort_channels_by_domain_frequency(channels)
+                                
+                                # 写入频道链接
+                                for channel in channels:
+                                    f.write(f"{channel.name},{channel.url}\n")
+                                    total_links += 1
+                            else:
+                                # 即使没有链接也写入频道名（方便调试）
+                                f.write(f"{channel_name},#无有效链接\n")
             
             logger.info(f"结果已写入文件: {output_file}")
             logger.info(f"总计有效链接: {total_links} 个 (包含1个时间戳频道)")
@@ -514,7 +555,7 @@ class ModularBatchProcessor:
         logger.info("4. 生成结果文件...")
         try:
             total_valid = self.result_formatter.write_results_to_file(
-                all_results, self.config.output_file
+                all_results, self.config.output_file, groups
             )
             
             processing_time = time.time() - start_time

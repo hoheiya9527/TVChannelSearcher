@@ -110,7 +110,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
     
     def _parse_search_results(self, html_content: str, keyword: str) -> List[IPTVChannel]:
         """
-        解析 Tonkiang.us 的搜索结果
+        解析 Tonkiang.us 的搜索结果，实现精准匹配
         
         Args:
             html_content: HTML响应内容
@@ -122,6 +122,11 @@ class TonkiangSearcher(BaseIPTVSearcher):
         channels = []
         
         try:
+            # 精准匹配频道名称 - 只匹配包含完整关键词的内容
+            if not self._is_exact_channel_match(html_content, keyword):
+                logger.info(f"[{self.site_name}] 精准匹配失败: {keyword}, 未找到完全匹配的频道名称")
+                return channels
+            
             # 使用正则表达式提取链接和分辨率信息
             patterns = [
                 # 匹配 m3u8 链接模式
@@ -169,6 +174,87 @@ class TonkiangSearcher(BaseIPTVSearcher):
             logger.error(f"[{self.site_name}] 解析结果失败: {e}")
         
         return channels
+    
+    def _is_exact_channel_match(self, html_content: str, keyword: str) -> bool:
+        """
+        检查HTML内容是否包含精确的频道名称匹配
+        
+        Args:
+            html_content: HTML响应内容
+            keyword: 搜索关键词
+            
+        Returns:
+            bool: 是否精确匹配
+        """
+        # 标准化关键词 - 转换为小写并移除空格
+        normalized_keyword = keyword.lower().replace(' ', '').replace('-', '')
+        
+        # 在HTML中查找频道名称的多种可能形式
+        search_patterns = [
+            keyword,  # 原始关键词
+            keyword.upper(),  # 大写
+            keyword.lower(),  # 小写
+            keyword.replace('-', ''),  # 移除连字符
+            keyword.replace(' ', ''),  # 移除空格
+        ]
+        
+        # 检查是否包含完整的关键词
+        for pattern in search_patterns:
+            if pattern in html_content:
+                # 进一步验证：确保不是子字符串匹配
+                # 例如：搜索"CCTV-1"不应该匹配到"CCTV-13"
+                if self._validate_exact_match(html_content, pattern, normalized_keyword):
+                    return True
+        
+        return False
+    
+    def _validate_exact_match(self, content: str, found_pattern: str, normalized_keyword: str) -> bool:
+        """
+        验证找到的模式是否为精确匹配
+        
+        Args:
+            content: 内容
+            found_pattern: 找到的模式
+            normalized_keyword: 标准化的关键词
+            
+        Returns:
+            bool: 是否为精确匹配
+        """
+        # 查找所有匹配的位置
+        content_lower = content.lower()
+        pattern_lower = found_pattern.lower()
+        
+        start = 0
+        while True:
+            pos = content_lower.find(pattern_lower, start)
+            if pos == -1:
+                break
+            
+            # 检查前后字符，确保是完整词汇
+            before_char = content_lower[pos-1] if pos > 0 else ' '
+            after_char = content_lower[pos+len(pattern_lower)] if pos+len(pattern_lower) < len(content_lower) else ' '
+            
+            # 如果前后都是非字母数字字符，认为是精确匹配
+            if not before_char.isalnum() and not after_char.isalnum():
+                return True
+            
+            # 特殊处理：如果后面紧跟数字，检查是否为不同的频道
+            if after_char.isdigit():
+                # 提取完整的数字部分
+                end_pos = pos + len(pattern_lower)
+                while end_pos < len(content_lower) and content_lower[end_pos].isdigit():
+                    end_pos += 1
+                
+                full_match = content_lower[pos:end_pos]
+                full_normalized = full_match.replace('-', '').replace(' ', '')
+                
+                # 如果标准化后完全相同，则匹配
+                if full_normalized == normalized_keyword:
+                    return True
+            
+            start = pos + 1
+        
+        return False
     
     def _is_valid_stream_url(self, url: str) -> bool:
         """
@@ -227,7 +313,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
     
     def _validate_link(self, channel: IPTVChannel) -> bool:
         """
-        验证链接的有效性
+        验证链接的有效性，包括速度测试
         
         Args:
             channel: 频道对象
@@ -239,23 +325,85 @@ class TonkiangSearcher(BaseIPTVSearcher):
             return True
         
         try:
-            # 使用HEAD请求检查链接可达性 - 减少超时时间
+            # 首先使用HEAD请求检查链接可达性
             response = self.session.head(channel.url, timeout=3, allow_redirects=True)
             
             # 检查状态码
-            if response.status_code in [200, 206, 302, 301]:
-                # 检查分辨率要求
-                if self.config.min_resolution > 0:
-                    resolution_height = self._get_resolution_height(channel.resolution)
-                    if resolution_height < self.config.min_resolution:
-                        return False
-                
-                return True
+            if response.status_code not in [200, 206, 302, 301]:
+                logger.debug(f"[{self.site_name}] 链接状态码无效 {channel.url}: {response.status_code}")
+                return False
+            
+            # 检查分辨率要求
+            if self.config.min_resolution > 0:
+                resolution_height = self._get_resolution_height(channel.resolution)
+                if resolution_height < self.config.min_resolution:
+                    logger.debug(f"[{self.site_name}] 链接分辨率不足 {channel.url}: {resolution_height}p")
+                    return False
+            
+            # 进行速度测试 - 下载前几KB数据测试速度
+            speed_valid = self._test_download_speed(channel.url)
+            if not speed_valid:
+                logger.debug(f"[{self.site_name}] 链接速度不足 {channel.url}: <200KB/s")
+                return False
+            
+            return True
             
         except Exception as e:
             logger.debug(f"[{self.site_name}] 链接验证失败 {channel.url}: {e}")
         
         return False
+    
+    def _test_download_speed(self, url: str) -> bool:
+        """
+        测试链接下载速度
+        
+        Args:
+            url: 链接URL
+            
+        Returns:
+            bool: 速度是否满足要求（>=200KB/s）
+        """
+        try:
+            import time
+            
+            # 设置下载测试参数
+            test_duration = 2  # 测试2秒
+            min_speed_kbps = 200  # 最小速度200KB/s
+            
+            start_time = time.time()
+            downloaded_bytes = 0
+            
+            # 使用流式下载测试速度
+            with self.session.get(url, stream=True, timeout=5) as response:
+                if response.status_code not in [200, 206]:
+                    return False
+                
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        downloaded_bytes += len(chunk)
+                        elapsed = time.time() - start_time
+                        
+                        # 测试足够时间后计算速度
+                        if elapsed >= test_duration:
+                            speed_kbps = (downloaded_bytes / 1024) / elapsed
+                            return speed_kbps >= min_speed_kbps
+                        
+                        # 如果下载了足够的数据（比如100KB），也可以提前判断
+                        if downloaded_bytes >= 102400:  # 100KB
+                            speed_kbps = (downloaded_bytes / 1024) / elapsed
+                            return speed_kbps >= min_speed_kbps
+            
+            # 如果循环结束但没有足够数据，计算当前速度
+            elapsed = time.time() - start_time
+            if elapsed > 0 and downloaded_bytes > 0:
+                speed_kbps = (downloaded_bytes / 1024) / elapsed
+                return speed_kbps >= min_speed_kbps
+            
+            return False
+            
+        except Exception as e:
+            logger.debug(f"[{self.site_name}] 速度测试失败 {url}: {e}")
+            return False
     
     def _get_resolution_height(self, resolution: str) -> int:
         """
