@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 配置日志
@@ -49,7 +50,7 @@ class IPTVChannel:
 class SearchConfig:
     """搜索配置类"""
     max_results: int = 10           # 最大结果数
-    timeout: int = 10              # 超时时间(秒) - 从30减少到10
+    timeout: int = 20              # 超时时间(秒) - 增加到20秒以适应tonkiang.us的响应时间
     min_resolution: int = 0        # 最小分辨率要求
     enable_validation: bool = True  # 是否启用链接验证
     enable_cache: bool = True      # 是否启用缓存
@@ -148,43 +149,57 @@ class BaseIPTVSearcher(ABC):
         
         logger.info(f"[{self.site_name}] 开始并发验证 {len(channels)} 个链接 (目标: {target_count} 个有效链接)")
         
+        executor = ThreadPoolExecutor(max_workers=max_workers)
         try:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # 提交验证任务
-                future_to_channel = {
-                    executor.submit(self._validate_link, channel): channel
-                    for channel in channels
-                }
+            # 提交验证任务
+            future_to_channel = {
+                executor.submit(self._validate_link, channel): channel
+                for channel in channels
+            }
+            
+            # 收集验证结果，达到目标数量后停止
+            completed_count = 0
+            start_time = time.time()
+            
+            for future in as_completed(future_to_channel, timeout=12):  # 增加总超时到12秒
+                channel = future_to_channel[future]
+                completed_count += 1
                 
-                # 收集验证结果，达到目标数量后停止
-                completed_count = 0
-                for future in as_completed(future_to_channel, timeout=15):  # 总超时15秒（考虑速度测试需要时间）
-                    channel = future_to_channel[future]
-                    completed_count += 1
-                    
-                    try:
-                        is_valid = future.result()
-                        if is_valid:
-                            valid_channels.append(channel)
-                            # 达到目标数量，提前终止
-                            if len(valid_channels) >= target_count:
-                                logger.info(f"[{self.site_name}] 已找到 {len(valid_channels)} 个有效链接，提前结束验证")
-                                # 取消剩余任务
-                                for remaining_future in future_to_channel:
-                                    if not remaining_future.done():
-                                        remaining_future.cancel()
-                                break
-                                
-                    except Exception as e:
-                        logger.debug(f"[{self.site_name}] 验证异常 {channel.url}: {e}")
-                    
-                    # 每3个显示一次进度（更频繁的反馈）
-                    if completed_count % 3 == 0 or len(valid_channels) >= target_count:
-                        logger.info(f"[{self.site_name}] 验证进度: {len(valid_channels)}个有效/{completed_count}个已验证")
+                try:
+                    is_valid = future.result(timeout=8)  # 单个任务超时8秒，给质量验证足够时间
+                    if is_valid:
+                        valid_channels.append(channel)
+                        # 达到目标数量，立即强制关闭并返回
+                        if len(valid_channels) >= target_count:
+                            logger.info(f"[{self.site_name}] 已找到 {len(valid_channels)} 个有效链接，提前结束验证")
+                            executor.shutdown(wait=False)  # 强制关闭，不等待
+                            result_count = len(valid_channels)
+                            status = "达标"
+                            logger.info(f"[{self.site_name}] 验证完成: {result_count} 个有效链接 [{status}]")
+                            return valid_channels
+                            
+                except Exception as e:
+                    logger.debug(f"[{self.site_name}] 验证异常 {channel.url}: {e}")
+                
+                # 每3个显示一次进度
+                if completed_count % 3 == 0:
+                    elapsed = time.time() - start_time
+                    logger.info(f"[{self.site_name}] 验证进度: {len(valid_channels)}个有效/{completed_count}个已验证 ({elapsed:.1f}s)")
+                
+                # 超时保护 - 如果超过10秒还没完成，直接返回已找到的结果
+                if time.time() - start_time > 10:
+                    logger.info(f"[{self.site_name}] 验证超时({time.time() - start_time:.1f}s)，返回已找到的 {len(valid_channels)} 个有效链接")
+                    executor.shutdown(wait=False)
+                    result_count = len(valid_channels)
+                    status = f"超时({result_count}/{target_count})"
+                    logger.info(f"[{self.site_name}] 验证完成: {result_count} 个有效链接 [{status}]")
+                    return valid_channels
         
         except Exception as e:
             logger.warning(f"[{self.site_name}] 并发验证超时或异常: {e}")
             # 如果并发验证失败，返回已经验证的结果
+        finally:
+            executor.shutdown(wait=False)  # 确保执行器被关闭
         
         result_count = len(valid_channels)
         status = "达标" if result_count >= target_count else f"不足({result_count}/{target_count})"
