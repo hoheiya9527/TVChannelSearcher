@@ -68,7 +68,7 @@ jobs:
         timeout 5400 python run_processor.py
         echo "✅ 搜索完成"
     
-    - name: 检查结果文件
+    - name: 检查结果文件并设置变量
       id: check_result
       run: |
         if [ ! -f result.txt ]; then
@@ -90,11 +90,6 @@ jobs:
         group_count=${group_count:-0}
         
         echo "📊 结果统计: 行数=$line_count, 大小=$file_size, 分组=$group_count"
-        
-        # 使用GitHub Actions推荐的方式设置输出
-        echo "line_count=$line_count" >> $GITHUB_OUTPUT
-        echo "file_size=$file_size" >> $GITHUB_OUTPUT
-        echo "group_count=$group_count" >> $GITHUB_OUTPUT
     
     - name: 检查文件变化
       id: check_changes
@@ -125,7 +120,15 @@ jobs:
         cd ..
         git add Parser/result.txt
         current_time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "频道分组: ${{ steps.check_result.outputs.group_count }} 个" -m "总链接数: ${{ steps.check_result.outputs.line_count }} 行" -m "文件大小: ${{ steps.check_result.outputs.file_size }}"
+        
+        # 重新计算统计信息用于提交消息
+        cd Parser
+        line_count=$(wc -l < result.txt 2>/dev/null || echo "0")
+        file_size=$(du -h result.txt 2>/dev/null | cut -f1 || echo "0B")
+        group_count=$(grep -c "^[^,]*,$" result.txt 2>/dev/null || echo "0")
+        cd ..
+        
+        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "频道分组: ${group_count} 个" -m "总链接数: ${line_count} 行" -m "文件大小: ${file_size}"
         git push
         echo "✅ 更新已提交"
 
