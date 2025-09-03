@@ -1,314 +1,221 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Tonkiang.us IPTV搜索器实现
-专门针对 https://tonkiang.us/ 站点的搜索逻辑
-"""
 
 import requests
-import re
 import time
 import random
-from typing import List, Dict, Optional
+import re
+import logging
+from typing import List, Optional
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import logging
 
-# 导入搜索器接口
 from searcher_interface import BaseIPTVSearcher, IPTVChannel, SearchConfig, SearcherFactory
 
-# 配置日志 - 减少urllib3的警告信息  
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # 确保调试信息显示
-
 
 class TonkiangSearcher(BaseIPTVSearcher):
-    """Tonkiang.us 搜索器实现 - 增强反反爬虫功能"""
-    
-    # 用户代理池 - 模拟不同的真实浏览器
-    USER_AGENTS = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:119.0) Gecko/20100101 Firefox/119.0',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    ]
+    """Tonkiang.us IPTV搜索器 - 重写版本"""
     
     def __init__(self, config: SearchConfig = None):
-        """
-        初始化 Tonkiang 搜索器
-        
-        Args:
-            config: 搜索配置
-        """
+        super().__init__(config)
         self.site_name = "Tonkiang.us"
         self.base_url = "https://tonkiang.us"
-        super().__init__(config)
+        self._setup_session()
+        self._last_request_time = 0
+        
+        # 用户代理池
+        self.USER_AGENTS = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
     
-    def _get_random_user_agent(self) -> str:
-        """获取随机用户代理"""
-        return random.choice(self.USER_AGENTS)
-    
-    def _random_delay(self, min_delay: float = 1.0, max_delay: float = 3.0) -> None:
-        """随机延迟，模拟人类行为"""
-        delay = random.uniform(min_delay, max_delay)
-        time.sleep(delay)
-    
-    def _batch_delay(self) -> None:
-        """批量处理时的额外延迟，避免请求过于频繁"""
-        delay = random.uniform(3.0, 8.0)  # 批量处理时更长的延迟
-        logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒")
-        time.sleep(delay)
+    def get_searcher_info(self) -> dict:
+        """获取搜索器信息"""
+        return {
+            'name': self.site_name,
+            'url': self.base_url,
+            'description': 'Tonkiang.us IPTV搜索器'
+        }
     
     def _setup_session(self):
         """设置HTTP会话"""
         self.session = requests.Session()
         
-        # 配置重试策略
+        # 设置重试策略 - 减少重试次数和日志
         retry_strategy = Retry(
-            total=3,
+            total=1,  # 减少重试次数
+            backoff_factor=0.5,
             status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "POST"],
-            backoff_factor=2,
-            raise_on_status=False
+            raise_on_status=False  # 不抛出状态异常
         )
-        
         adapter = HTTPAdapter(
-            pool_connections=50,  # 增加连接池
-            pool_maxsize=50,      # 增加连接池大小
             max_retries=retry_strategy,
-            pool_block=False
+            pool_connections=50,
+            pool_maxsize=50
         )
-        
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
         
-        # 使用随机用户代理和完整的请求头模拟真实浏览器
-        random_ua = self._get_random_user_agent()
-        
+        # 设置请求头
         self.session.headers.update({
-            'User-Agent': random_ua,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-            'Accept-Encoding': 'gzip, deflate, br',  # 重新启用压缩
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',  # 改为none，模拟直接访问
+            'Sec-Fetch-Site': 'none',
             'Sec-Fetch-User': '?1',
             'Cache-Control': 'max-age=0',
-            'Sec-CH-UA': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            'Sec-CH-UA-Mobile': '?0',
-            'Sec-CH-UA-Platform': '"Windows"',
         })
+        
+        # 减少urllib3的警告日志
+        logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
         
         logger.info(f"[{self.site_name}] HTTP会话已配置")
     
-    def _send_search_request(self, keyword: str, page: int = 1) -> str:
-        """
-        发送搜索请求到 Tonkiang.us (增强反反爬虫)
-        
-        Args:
-            keyword: 搜索关键词
-            page: 页码
-            
-        Returns:
-            str: 响应HTML内容，None表示网络异常
-        """
-        import time
-        import random
-        
+    def _get_random_user_agent(self) -> str:
+        """获取随机用户代理"""
+        return random.choice(self.USER_AGENTS)
+    
+    def _random_delay(self, min_delay: float = 1.0, max_delay: float = 3.0):
+        """随机延迟"""
+        delay = random.uniform(min_delay, max_delay)
+        time.sleep(delay)
+    
+    def _batch_delay(self):
+        """批量处理延迟"""
+        delay = random.uniform(3.0, 8.0)
+        logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒")
+        time.sleep(delay)
+    
+    def _send_search_request(self, keyword: str, page: int = 1) -> Optional[str]:
+        """发送搜索请求"""
         try:
-            # 第一步：检查是否为批量处理，如果是则增加延迟
+            # 频率控制
             if hasattr(self, '_last_request_time'):
                 time_since_last = time.time() - self._last_request_time
-                if time_since_last < 5.0:  # 如果距离上次请求少于5秒
+                if time_since_last < 5.0:
                     self._batch_delay()
             
-            # 第二步：随机延迟开始，避免请求过于规律
+            # 预热访问
             self._random_delay(1.0, 3.0)
-            
-            # 第三步：先访问主页获取cookies和session，使用新的用户代理
             logger.debug(f"[{self.site_name}] 预热访问主页...")
             
-            # 为每次搜索更换用户代理
-            new_ua = self._get_random_user_agent()
-            self.session.headers.update({
-                'User-Agent': new_ua,
-                'Referer': '',  # 模拟直接访问
-                'Sec-Fetch-Site': 'none',
-            })
+            # 更新用户代理
+            self.session.headers['User-Agent'] = self._get_random_user_agent()
             
-            homepage_response = self.session.get(
-                self.base_url, 
-                timeout=(15, 20),  # 增加超时时间
-                allow_redirects=True
-            )
+            # 访问主页
+            try:
+                homepage_response = self.session.get(self.base_url, timeout=20)
+                if homepage_response.status_code == 200:
+                    logger.debug(f"[{self.site_name}] 主页访问成功")
+                else:
+                    logger.warning(f"[{self.site_name}] 主页访问失败: {homepage_response.status_code}")
+            except Exception as e:
+                logger.warning(f"[{self.site_name}] 主页访问异常: {e}")
             
-            if homepage_response.status_code == 200:
-                logger.debug(f"[{self.site_name}] 主页访问成功")
-            elif homepage_response.status_code == 503:
-                logger.warning(f"[{self.site_name}] 主页访问被拦截(503)，尝试更长延迟...")
-                self._batch_delay()  # 使用批量延迟
-            else:
-                logger.warning(f"[{self.site_name}] 主页访问失败: {homepage_response.status_code}")
-            
-            # 随机延迟，模拟人类浏览行为
+            # 搜索请求
             self._random_delay(2.0, 5.0)
+            logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
             
-            # 第二步：发送搜索请求
             search_url = f"{self.base_url}/"
-            search_data = {'seerch': keyword}  # 注意：seerch 是故意的拼写
+            search_data = {'seerch': keyword}
             
-            # 更新请求头，模拟从主页提交表单
+            # 更新请求头
             self.session.headers.update({
                 'Referer': f'{self.base_url}/',
                 'Origin': self.base_url,
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-User': '?1',
+                'Content-Type': 'application/x-www-form-urlencoded',
             })
             
-            logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
-            
-            response = self.session.post(
-                search_url, 
-                data=search_data, 
-                timeout=(15, self.config.timeout + 5),  # 增加超时时间
-                allow_redirects=True,
-                headers={
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                }
-            )
-            
-            if response.status_code == 200:
-                logger.info(f"[{self.site_name}] 搜索请求成功: {keyword}")
+            # 尝试搜索，最多4次
+            for attempt in range(4):
+                if attempt > 0:
+                    logger.debug(f"[{self.site_name}] 第 {attempt} 次重试...")
+                    self._random_delay(5.0 + attempt * 2, 10.0 + attempt * 3)
+                    self.session.headers['User-Agent'] = self._get_random_user_agent()
                 
-                # 确保正确解码内容
-                if response.encoding is None:
-                    response.encoding = 'utf-8'
-                content = response.text
-                
-                # 简单的内容验证
-                if len(content) < 1000:
-                    logger.warning(f"[{self.site_name}] 返回内容过短，可能被反爬虫拦截")
-                
-                # 记录请求时间，用于批量处理延迟控制
-                self._last_request_time = time.time()
-                return content
-            elif response.status_code == 503:
-                logger.warning(f"[{self.site_name}] 服务不可用(503)，可能触发反爬虫，尝试多次重试...")
-                
-                # 多次重试策略
-                for retry_count in range(3):
-                    logger.debug(f"[{self.site_name}] 第 {retry_count + 1} 次重试...")
+                try:
+                    response = self.session.post(
+                        search_url,
+                        data=search_data,
+                        timeout=30,
+                        allow_redirects=True
+                    )
                     
-                    # 更长时间的随机延迟
-                    self._random_delay(5.0 + retry_count * 2, 10.0 + retry_count * 3)
+                    if response.encoding is None:
+                        response.encoding = 'utf-8'
+                    content = response.text
                     
-                    # 更换用户代理
-                    new_ua = self._get_random_user_agent()
-                    self.session.headers.update({'User-Agent': new_ua})
-                    
-                    try:
-                        retry_response = self.session.post(
-                            search_url, 
-                            data=search_data, 
-                            timeout=(20, self.config.timeout + 10),
-                            allow_redirects=True,
-                            headers={'Content-Type': 'application/x-www-form-urlencoded'}
-                        )
-                        
-                        if retry_response.status_code == 200:
-                            logger.info(f"[{self.site_name}] 第 {retry_count + 1} 次重试成功: {keyword}")
-                            # 记录请求时间
-                            self._last_request_time = time.time()
-                            return retry_response.text
-                        elif retry_response.status_code != 503:
-                            logger.warning(f"[{self.site_name}] 重试返回状态码: {retry_response.status_code}")
+                    # 检查响应质量
+                    if response.status_code == 200 and len(content) >= 10000:
+                        logger.info(f"[{self.site_name}] 搜索请求成功: {keyword}")
+                        self._last_request_time = time.time()
+                        return content
+                    elif response.status_code == 200:
+                        logger.warning(f"[{self.site_name}] 内容过短({len(content)}字符)")
+                    elif response.status_code == 503:
+                        logger.warning(f"[{self.site_name}] 服务不可用(503)")
+                    else:
+                        logger.warning(f"[{self.site_name}] 状态码: {response.status_code}")
+                        if response.status_code not in [503, 200]:
                             break
-                    except Exception as e:
-                        logger.warning(f"[{self.site_name}] 重试异常: {e}")
-                        continue
-                
-                logger.error(f"[{self.site_name}] 所有重试均失败")
-                return None
-            else:
-                logger.warning(f"[{self.site_name}] 搜索请求失败，状态码: {response.status_code}")
-                return ""
-                
+                            
+                except Exception as e:
+                    logger.warning(f"[{self.site_name}] 请求异常: {e}")
+                    if attempt == 3:
+                        break
+            
+            logger.error(f"[{self.site_name}] 所有尝试均失败")
+            self._last_request_time = time.time()
+            return None
+            
         except Exception as e:
             logger.error(f"[{self.site_name}] 搜索请求异常: {keyword} - {e}")
-            # 即使异常也记录时间，避免频繁重试
             self._last_request_time = time.time()
-            return None  # 返回None表示网络异常
+            return None
     
     def _parse_search_results(self, html_content: str, keyword: str) -> List[IPTVChannel]:
-        """
-        解析 Tonkiang.us 的搜索结果
-        
-        Args:
-            html_content: HTML响应内容，如果为None表示网络异常
-            keyword: 搜索关键词
-            
-        Returns:
-            List[IPTVChannel]: 匹配的频道列表
-        """
+        """解析搜索结果"""
         channels = []
         
-        # 处理网络异常
-        if html_content is None:
-            logger.error(f"[{self.site_name}] 网络异常，无法获取搜索结果: {keyword}")
-            return channels
-        
-        # 处理空响应
-        if not html_content.strip():
-            logger.warning(f"[{self.site_name}] 搜索响应为空: {keyword}")
+        if not html_content:
             return channels
         
         try:
             logger.debug(f"[{self.site_name}] 开始解析HTML内容，长度: {len(html_content)} 字符")
             
-            # 解析HTML
             soup = BeautifulSoup(html_content, 'html.parser')
-            
-            # 查找所有 tba 标签（这是最稳定的特征，包含流媒体链接）
             tba_elements = soup.find_all('tba')
             logger.debug(f"[{self.site_name}] 找到 {len(tba_elements)} 个流媒体链接")
             
             for tba in tba_elements:
                 try:
-                    # 获取tba标签内容
-                    tba_text = tba.get_text(strip=True)
-                    
-                    # 检查是否包含有效的流媒体URL
-                    if not self._is_valid_stream_url(tba_text):
+                    # 获取URL
+                    stream_url = tba.get_text(strip=True)
+                    if not self._is_valid_stream_url(stream_url):
                         continue
                     
-                    stream_url = tba_text
-                    
-                    # 向上查找包含频道名称的容器
+                    # 查找频道名称
                     channel_name = self._find_channel_name_near_tba(tba, keyword)
                     if not channel_name:
                         continue
                     
-                    # 验证找到的频道名称是否真的匹配搜索关键词
+                    # 验证名称匹配
                     if not self._is_channel_match(channel_name, keyword):
-                        logger.debug(f"[{self.site_name}] 过滤: 频道名称 '{channel_name}' 不匹配搜索关键词 '{keyword}' - {stream_url[:50]}...")
+                        logger.debug(f"[{self.site_name}] 过滤: '{channel_name}' 不匹配 '{keyword}'")
                         continue
                     
-                    # 查找分辨率信息
+                    # 查找分辨率
                     resolution = self._find_resolution_near_tba(tba)
                     
                     # 创建频道对象
@@ -332,91 +239,69 @@ class TonkiangSearcher(BaseIPTVSearcher):
         
         return channels
     
-    def _is_channel_match(self, text: str, keyword: str) -> bool:
-        """
-        检查文本是否匹配频道名称（忽略大小写）
-        
-        Args:
-            text: 待检查的文本
-            keyword: 搜索关键词
-            
-        Returns:
-            bool: 是否匹配
-        """
-        if not text or not keyword:
+    def _is_valid_stream_url(self, url: str) -> bool:
+        """检查是否为有效的流媒体URL"""
+        if not url or len(url) < 10:
             return False
         
-        text_lower = text.lower().strip()
-        keyword_lower = keyword.lower().strip()
+        url_lower = url.lower()
         
-        # 精确匹配优先
-        if text_lower == keyword_lower:
-            return True
+        # 过滤不支持的协议
+        invalid_protocols = ['udp://', 'rtp://', 'rtsp://']
+        for protocol in invalid_protocols:
+            if protocol in url_lower:
+                logger.debug(f"[{self.site_name}] 跳过不支持的协议: {url[:50]}...")
+                return False
         
-        # 处理常见的频道名称格式变化
-        # 移除常见的分隔符和空格进行比较
-        text_clean = text_lower.replace('-', '').replace('_', '').replace(' ', '')
-        keyword_clean = keyword_lower.replace('-', '').replace('_', '').replace(' ', '')
+        # 检查协议
+        if not re.match(r'^(https?|rtmp)://', url, re.IGNORECASE):
+            return False
         
-        if text_clean == keyword_clean:
-            return True
+        # IPv6地址检查
+        if '[' in url and ']:' in url:
+            logger.debug(f"[{self.site_name}] 检测到IPv6地址: {url[:50]}...")
         
-        # 对于CCTV类频道，进行更严格的匹配
-        if 'cctv' in keyword_lower:
-            # 提取数字部分进行精确匹配
-            import re
-            keyword_num = re.findall(r'cctv[_-]?(\d+)', keyword_lower)
-            text_num = re.findall(r'cctv[_-]?(\d+)', text_lower)
-            
-            if keyword_num and text_num:
-                # 数字必须完全匹配
-                return keyword_num[0] == text_num[0]
+        # 检查流媒体格式或端口
+        stream_formats = ['.m3u8', '.ts', '.flv', '.mp4', '.mkv']
+        has_format = any(fmt in url_lower for fmt in stream_formats)
+        has_port = re.search(r':\d{2,5}/', url)
         
-        # 对于其他频道，使用包含匹配，但要避免部分匹配问题
-        # 例如：搜索"湖南卫视"不应该匹配"湖南卫视HD"以外的其他内容
-        if len(keyword_lower) >= 3:  # 关键词足够长时才使用包含匹配
-            return keyword_lower in text_lower
-        
-        return False
+        return has_format or has_port
     
-    def _find_channel_name_near_tba(self, tba_element, keyword: str) -> str:
-        """
-        从tba标签附近查找频道名称
-        
-        Args:
-            tba_element: tba标签元素
-            keyword: 搜索关键词 (用于判断搜索范围)
-            
-        Returns:
-            str: 找到的频道名称，如果没找到返回None
-        """
+    def _find_channel_name_near_tba(self, tba_element, keyword: str) -> Optional[str]:
+        """在tba元素附近查找频道名称"""
         try:
-            # 向上查找父容器，通常是table或div
-            current = tba_element
-            for _ in range(10):  # 最多向上10层
-                current = current.parent
-                if not current:
-                    break
+            # 向上查找父级容器
+            for level in range(1, 6):
+                parent = tba_element
+                for _ in range(level):
+                    parent = parent.parent
+                    if not parent:
+                        break
                 
-                # 在当前容器中查找所有div和a标签
+                if not parent:
+                    continue
+                
+                # 在父级容器中查找文本
+                texts = []
+                for elem in parent.find_all(text=True):
+                    text = elem.strip()
+                    if text and len(text) > 1:
+                        texts.append(text)
+                
+                # 查找匹配的频道名称
                 potential_names = []
-                for element in current.find_all(['div', 'a']):
-                    text = element.get_text(strip=True)
-                    
-                    # 检查文本长度是否合理（频道名称通常不会太长）
-                    if len(text) > 50 or len(text) < 2:
+                for text in texts:
+                    if len(text) > 50:
                         continue
-                    
-                    # 进一步检查是否真的是频道名称（不包含URL等）
-                    if not any(x in text.lower() for x in ['http', '.m3u8', '.ts', 'onclick', 'copy', 'play']):
-                        # 检查是否看起来像频道名称
-                        if any(pattern in text.lower() for pattern in ['cctv', '卫视', 'tv', '频道']):
-                            potential_names.append(text)
+                    if any(x in text.lower() for x in ['http', '.m3u8', '.ts', 'onclick', 'copy', 'play']):
+                        continue
+                    if any(pattern in text.lower() for pattern in ['cctv', '卫视', 'tv', '频道']):
+                        potential_names.append(text)
                 
-                # 如果找到了潜在的频道名称，返回第一个
                 if potential_names:
                     return potential_names[0]
-                            
+            
             return None
             
         except Exception as e:
@@ -424,549 +309,175 @@ class TonkiangSearcher(BaseIPTVSearcher):
             return None
     
     def _find_resolution_near_tba(self, tba_element) -> str:
-        """
-        从tba标签附近查找分辨率信息
-        
-        Args:
-            tba_element: tba标签元素
-            
-        Returns:
-            str: 找到的分辨率信息
-        """
+        """查找分辨率信息"""
         try:
-            # 向上查找父容器
-            current = tba_element
-            for _ in range(10):  # 最多向上10层
-                current = current.parent
-                if not current:
-                    break
-                
-                # 在当前容器中查找i标签（分辨率通常在i标签中）
-                for i_elem in current.find_all('i'):
-                    text = i_elem.get_text(strip=True)
-                    # 处理HTML实体
-                    text = text.replace('&#8226;', ' ').replace('•', ' ')
-                    resolution = self._extract_resolution_from_text(text)
-                    if resolution != "未知":
-                        return resolution
-                
-                # 如果i标签中没找到，在整个容器文本中搜索
-                container_text = current.get_text()
-                container_text = container_text.replace('&#8226;', ' ').replace('•', ' ')
-                resolution = self._extract_resolution_from_text(container_text)
-                if resolution != "未知":
-                    return resolution
-                    
-            return "未知"
-            
-        except Exception as e:
-            logger.debug(f"[{self.site_name}] 查找分辨率异常: {e}")
-            return "未知"
-    
-    def _find_stream_url_in_container(self, start_element) -> str:
-        """
-        从指定元素开始，查找流媒体URL
-        
-        Args:
-            start_element: 开始查找的元素
-            
-        Returns:
-            str: 找到的流媒体URL，如果没找到返回None
-        """
-        try:
-            # 向上找到父容器
-            container = start_element
-            for _ in range(5):  # 最多向上5层
-                if container.parent:
-                    container = container.parent
-                    if container.name == 'div':
+            # 在附近查找分辨率信息
+            for level in range(1, 4):
+                parent = tba_element
+                for _ in range(level):
+                    parent = parent.parent
+                    if not parent:
                         break
-                else:
-                    break
-            
-            # 在容器中查找tba标签（流媒体链接通常在tba标签中）
-            tba_elements = container.find_all('tba')
-            for tba in tba_elements:
-                text = tba.get_text(strip=True)
-                if self._is_valid_stream_url(text):
-                    return text
-            
-            # 如果tba中没找到，在整个容器文本中搜索
-            container_text = container.get_text()
-            urls = self._extract_streaming_urls(container_text)
-            if urls:
-                return urls[0]
-            
-            return None
-            
-        except Exception as e:
-            logger.debug(f"[{self.site_name}] 查找流媒体链接异常: {e}")
-            return None
-    
-    def _find_resolution_in_container(self, start_element) -> str:
-        """
-        从指定元素开始，查找分辨率信息
-        
-        Args:
-            start_element: 开始查找的元素
-            
-        Returns:
-            str: 找到的分辨率信息
-        """
-        try:
-            # 向上找到父容器
-            container = start_element
-            for _ in range(5):  # 最多向上5层
-                if container.parent:
-                    container = container.parent
-                    if container.name == 'div':
-                        break
-                else:
-                    break
-            
-            # 在容器中查找i标签（分辨率信息通常在i标签中）
-            i_elements = container.find_all('i')
-            for i_elem in i_elements:
-                text = i_elem.get_text(strip=True)
-                # 处理HTML实体
-                text = text.replace('&#8226;', ' ').replace('•', ' ')
-                resolution = self._extract_resolution_from_text(text)
-                if resolution != "未知":
-                    return resolution
-            
-            # 如果i标签中没找到，在整个容器文本中搜索
-            container_text = container.get_text()
-            container_text = container_text.replace('&#8226;', ' ').replace('•', ' ')
-            resolution = self._extract_resolution_from_text(container_text)
-            return resolution
-            
-        except Exception as e:
-            logger.debug(f"[{self.site_name}] 查找分辨率异常: {e}")
-            return "未知"
-    
-    def _extract_streaming_urls(self, text: str) -> List[str]:
-        """
-        从文本中提取流媒体URL
-        
-        Args:
-            text: 文本内容
-            
-        Returns:
-            List[str]: URL列表
-        """
-        urls = []
-        
-        patterns = [
-            r'(https?://[^\s<>"\']+\.m3u8[^\s<>"\']*)',
-            r'(https?://[^\s<>"\']+\.ts[^\s<>"\']*)',
-            r'(https?://[^\s<>"\']+:\d{4,5}/[^\s<>"\']*)',
-            r'(rtmp://[^\s<>"\']+)',
-            r'(rtsp://[^\s<>"\']+)',
-        ]
-        
-        for pattern in patterns:
-            matches = re.finditer(pattern, text, re.IGNORECASE)
-            for match in matches:
-                url = match.group(1).strip()
-                url = re.sub(r'[<>"\'\s]+.*$', '', url)  # 清理URL
                 
-                if self._is_valid_stream_url(url):
-                    urls.append(url)
-        
-        return urls
-    
-    def _extract_resolution_from_text(self, text: str) -> str:
-        """
-        从文本中提取标准分辨率格式
-        
-        Args:
-            text: 信息文本
+                if not parent:
+                    continue
+                
+                parent_text = parent.get_text()
+                
+                # 查找分辨率模式
+                resolution_patterns = [
+                    r'(\d{3,4})[x×](\d{3,4})',
+                    r'(\d{3,4})[pP]',
+                    r'(4K|8K|HD|FHD|UHD)',
+                ]
+                
+                for pattern in resolution_patterns:
+                    match = re.search(pattern, parent_text, re.IGNORECASE)
+                    if match:
+                        if 'x' in pattern or '×' in pattern:
+                            return f"{match.group(1)}x{match.group(2)}"
+                        elif 'p' in pattern.lower():
+                            return f"{match.group(1)}p"
+                        else:
+                            return match.group(1)
             
-        Returns:
-            str: 分辨率信息
-        """
-        if not text:
-            return "未知"
-        
-        # 标准分辨率格式
-        standard_patterns = [
-            r'\b(1920x1080)\b',   # 1080p
-            r'\b(1280x720)\b',    # 720p  
-            r'\b(3840x2160)\b',   # 4K
-            r'\b(2560x1440)\b',   # 1440p
-            r'\b(1366x768)\b',    # 768p
-            r'\b(1024x576)\b',    # 576p
-            r'\b(854x480)\b',     # 480p
-            r'\b(640x360)\b',     # 360p
-        ]
-        
-        for pattern in standard_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return match.group(1)
-        
-        # 尝试匹配 p 格式
-        p_pattern = r'\b(1080|720|480|360)p\b'
-        match = re.search(p_pattern, text, re.IGNORECASE)
-        if match:
-            height = match.group(1)
-            if height == '1080':
-                return '1920x1080'
-            elif height == '720':
-                return '1280x720'
-            elif height == '480':
-                return '854x480'
-            elif height == '360':
-                return '640x360'
-            else:
-                return f"{height}p"
-        
-        return "未知"
-    
-    def _is_valid_stream_url(self, url: str) -> bool:
-        """
-        验证是否为有效的流媒体URL
-        
-        Args:
-            url: 待验证的URL
+            return "1920x1080"  # 默认分辨率
             
-        Returns:
-            bool: 是否有效
-        """
-        if not url or len(url) < 10:
+        except Exception:
+            return "1920x1080"
+    
+    def _is_channel_match(self, channel_name: str, keyword: str) -> bool:
+        """检查频道名称是否匹配关键词"""
+        if not channel_name or not keyword:
             return False
         
-        url_lower = url.lower()
+        channel_lower = channel_name.lower().strip()
+        keyword_lower = keyword.lower().strip()
         
-        # 排除无法通过HTTP验证的协议类型
-        invalid_protocols = ['udp://', 'rtp://', 'rtsp://']
-        for protocol in invalid_protocols:
-            if protocol in url_lower:
-                logger.debug(f"[{self.site_name}] 跳过不支持验证的协议: {url[:50]}...")
-                return False
+        # 精确匹配
+        if channel_lower == keyword_lower:
+            return True
         
-        # 检查协议 (包括IPv6地址支持)
-        if not re.match(r'^(https?|rtmp)://', url, re.IGNORECASE):
-            return False
+        # 清理后匹配
+        channel_clean = re.sub(r'[^\w\d]', '', channel_lower)
+        keyword_clean = re.sub(r'[^\w\d]', '', keyword_lower)
+        if channel_clean == keyword_clean:
+            return True
         
-        # 检查IPv6地址格式，标记但仍然接受
-        if '[' in url and ']:' in url:
-            logger.debug(f"[{self.site_name}] 检测到IPv6地址: {url[:50]}...")
+        # CCTV特殊处理
+        if 'cctv' in keyword_lower:
+            keyword_num_match = re.search(r'cctv[^\d]*(\d+)', keyword_lower)
+            channel_num_match = re.search(r'cctv[^\d]*(\d+)', channel_lower)
+            
+            if keyword_num_match and channel_num_match:
+                return keyword_num_match.group(1) == channel_num_match.group(1)
         
-        # 检查是否包含流媒体格式
-        stream_formats = ['.m3u8', '.ts', '.flv', '.mp4', '.mkv']
-        has_format = any(fmt in url_lower for fmt in stream_formats)
-        
-        # 或者包含端口号 (通常是IPTV服务)
-        has_port = re.search(r':\d{2,5}/', url)
-        
-        return has_format or has_port
+        # 包含匹配（作为最后选择）
+        return keyword_lower in channel_lower
     
     def _validate_link(self, channel: IPTVChannel) -> bool:
-        """
-        验证链接的有效性 (质量优化版本)
-        
-        Args:
-            channel: 频道对象
-            
-        Returns:
-            bool: 链接是否有效且质量良好
-        """
+        """验证链接有效性"""
         if not self.config.enable_validation:
             return True
         
         try:
-            # IPv6地址可能在某些环境下无法访问，先检查
+            # IPv6地址宽松验证
             if '[' in channel.url and ']:' in channel.url:
-                logger.debug(f"[{self.site_name}] IPv6地址可能不稳定，降低验证标准: {channel.url[:50]}...")
-                # IPv6地址验证可能失败，但不一定意味着链接无效
-                # 在某些网络环境下可能可用，所以给予更宽松的验证
+                logger.debug(f"[{self.site_name}] IPv6地址，降低验证标准: {channel.url[:50]}...")
                 try:
-                    timeout = 1  # 减少IPv6验证超时
+                    timeout = 1
                     if '.m3u8' in channel.url.lower():
                         return self._validate_m3u8_quality(channel.url, timeout)
                     else:
                         return self._validate_stream_basic(channel.url, timeout)
                 except:
-                    # IPv6验证失败时，假设链接可能有效（用户网络环境可能支持）
                     logger.debug(f"[{self.site_name}] IPv6链接验证失败，但保留链接: {channel.url[:50]}...")
                     return True
             
-            timeout = 3  # 稍微增加超时以确保质量检测
-            
-            # 对于m3u8文件，进行深度质量验证
+            # 常规验证 - 减少超时时间
+            timeout = 2  # 从3秒减少到2秒
             if '.m3u8' in channel.url.lower():
                 return self._validate_m3u8_quality(channel.url, timeout)
-            
-            # 对于其他类型流，进行基本验证
             return self._validate_stream_basic(channel.url, timeout)
-                
+            
         except Exception as e:
             logger.debug(f"[{self.site_name}] 链接验证异常: {channel.url}: {e}")
             return False
     
     def _validate_m3u8_quality(self, url: str, timeout: int) -> bool:
-        """
-        验证m3u8流的质量
-        
-        Args:
-            url: m3u8链接
-            timeout: 超时时间
-            
-        Returns:
-            bool: 是否为高质量流
-        """
+        """验证M3U8流质量"""
         try:
-            # 第一步：获取m3u8播放列表
-            response = self.session.get(url, timeout=timeout)
-            if response.status_code != 200:
-                logger.debug(f"[{self.site_name}] m3u8状态码异常: {response.status_code}")
-                return False
-            
-            playlist_content = response.text
-            
-            # 检查是否为有效的m3u8格式
-            if not ('#EXTM3U' in playlist_content or '#EXT-X-' in playlist_content):
-                logger.debug(f"[{self.site_name}] 无效的m3u8格式")
-                return False
-            
-            # 第二步：检查播放列表类型和质量
-            if '#EXT-X-STREAM-INF' in playlist_content:
-                # 主播放列表，提取实际流URL
-                import re
-                stream_urls = re.findall(r'(https?://[^\s]+\.m3u8[^\s]*)', playlist_content)
-                if not stream_urls:
-                    logger.debug(f"[{self.site_name}] 主播放列表中未找到流URL")
-                    return False
-                
-                # 验证第一个流URL的质量
-                return self._validate_m3u8_segments(stream_urls[0], timeout)
-            else:
-                # 直接的分片播放列表，验证分片质量
-                return self._validate_m3u8_segments(url, timeout)
-            
-        except Exception as e:
-            logger.debug(f"[{self.site_name}] m3u8质量验证异常")
-            return False
-    
-    def _validate_m3u8_segments(self, url: str, timeout: int) -> bool:
-        """
-        验证m3u8分片的质量
-        
-        Args:
-            url: m3u8分片播放列表URL
-            timeout: 超时时间
-            
-        Returns:
-            bool: 分片质量是否良好
-        """
-        try:
-            # 获取分片播放列表
+            # 简化验证，只检查M3U8文件本身
             response = self.session.get(url, timeout=timeout)
             if response.status_code != 200:
                 return False
             
-            content = response.text
+            content = response.text[:5000]  # 只读取前5KB
             
-            # 检查是否有足够的分片
-            segment_count = content.count('#EXTINF')
-            if segment_count < 2:  # 至少需要2个分片
-                logger.debug(f"[{self.site_name}] 分片数量不足: {segment_count}")
+            # 检查是否为有效的M3U8
+            if '#EXTM3U' not in content:
                 return False
-            
-            # 提取第一个分片URL进行质量测试
-            import re
-            from urllib.parse import urljoin
-            
-            # 查找第一个分片文件
-            lines = content.strip().split('\n')
-            segment_url = None
-            for i, line in enumerate(lines):
-                if line.startswith('#EXTINF'):
-                    if i + 1 < len(lines):
-                        segment_file = lines[i + 1].strip()
-                        if segment_file and not segment_file.startswith('#'):
-                            # 构建完整URL
-                            if segment_file.startswith('http'):
-                                segment_url = segment_file
-                            else:
-                                segment_url = urljoin(url, segment_file)
-                            break
-            
-            if not segment_url:
-                logger.debug(f"[{self.site_name}] 未找到有效分片URL")
-                return False
-            
-            # 测试分片下载速度和质量
-            return self._test_segment_quality(segment_url, timeout)
-            
-        except Exception as e:
-            logger.debug(f"[{self.site_name}] 分片验证异常: {e}")
-            return False
-    
-    def _test_segment_quality(self, segment_url: str, timeout: int) -> bool:
-        """
-        测试视频分片的质量
-        
-        Args:
-            segment_url: 分片URL
-            timeout: 超时时间
-            
-        Returns:
-            bool: 分片质量是否良好
-        """
-        try:
-            import time
-            start_time = time.time()
-            
-            # 下载分片的前几KB来测试速度和可用性
-            response = self.session.get(segment_url, timeout=timeout, stream=True)
-            if response.status_code != 200:
-                logger.debug(f"[{self.site_name}] 分片状态码异常: {response.status_code}")
-                return False
-            
-            # 检查响应头，确保是视频内容
-            content_type = response.headers.get('Content-Type', '').lower()
-            content_length = response.headers.get('Content-Length')
-            
-            # 如果Content-Type明确不是视频，直接失败
-            if content_type and 'text' in content_type:
-                logger.debug(f"[{self.site_name}] 分片返回文本内容: {content_type}")
-                response.close()
-                return False
-            
-            # 下载前32KB测试速度和内容
-            downloaded_bytes = 0
-            target_bytes = 32 * 1024  # 32KB
-            first_chunk = None
-            
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    if first_chunk is None:
-                        first_chunk = chunk
-                    downloaded_bytes += len(chunk)
-                    if downloaded_bytes >= target_bytes:
-                        break
-            
-            response.close()
-            elapsed = time.time() - start_time
-            
-            # 检查下载是否成功
-            if downloaded_bytes < 1024:  # 至少下载1KB
-                logger.debug(f"[{self.site_name}] 下载数据不足: {downloaded_bytes} 字节")
-                return False
-            
-            # 检查第一个chunk是否像视频数据
-            if first_chunk:
-                # 简单检查：视频文件通常不会以HTML标签开头
-                chunk_start = first_chunk[:100].lower()
-                if b'<html' in chunk_start or b'<!doctype' in chunk_start or b'<body' in chunk_start:
-                    logger.debug(f"[{self.site_name}] 分片返回HTML内容，非视频数据")
-                    return False
-            
-            # 检查下载速度 (至少50KB/s)
-            if elapsed > 0:
-                speed_kbps = (downloaded_bytes / 1024) / elapsed
-                if speed_kbps < 50:
-                    logger.debug(f"[{self.site_name}] 下载速度过慢: {speed_kbps:.1f}KB/s")
-                    return False
-                
-                logger.debug(f"[{self.site_name}] 分片质量验证通过: {speed_kbps:.1f}KB/s, {downloaded_bytes} 字节")
-                return True
             
             return True
             
-        except Exception as e:
-            logger.debug(f"[{self.site_name}] 分片质量测试异常: {e}")
+        except Exception:
             return False
+    
+
     
     def _validate_stream_basic(self, url: str, timeout: int) -> bool:
-        """
-        对非m3u8流进行基本验证
-        
-        Args:
-            url: 流URL
-            timeout: 超时时间
-            
-        Returns:
-            bool: 是否为有效流
-        """
+        """基本流验证"""
         try:
-            # 尝试HEAD请求
+            # 只做HEAD请求，避免下载数据
             response = self.session.head(url, timeout=timeout, allow_redirects=True)
-            if response.status_code in [200, 206, 302, 301]:
-                return True
+            return response.status_code in [200, 206, 302, 301]
             
-            # HEAD失败，尝试GET
-            response = self.session.get(url, timeout=timeout, stream=True)
-            if response.status_code in [200, 206]:
-                # 尝试下载一点数据验证
-                for chunk in response.iter_content(chunk_size=1024):
-                    if chunk:
-                        response.close()
-                        return True
-                        
-            response.close()
+        except Exception:
             return False
-            
-        except Exception as e:
-            logger.debug(f"[{self.site_name}] 基本流验证异常")
-            return False
-    
 
 
-
-# 注册搜索器到工厂
+# 注册搜索器
 SearcherFactory.register_searcher("tonkiang", TonkiangSearcher)
 
 
-# 快速创建函数
-def create_tonkiang_searcher(config: SearchConfig = None) -> TonkiangSearcher:
-    """
-    快速创建 Tonkiang 搜索器
-    
-    Args:
-        config: 搜索配置
-        
-    Returns:
-        TonkiangSearcher: 搜索器实例
-    """
-    return TonkiangSearcher(config)
-
-
+# 测试代码
 if __name__ == "__main__":
-    # 测试代码
+    import sys
+    
+    # 配置日志
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+    
     print("=" * 50)
     print("Tonkiang.us 搜索器测试")
     print("=" * 50)
     
-    # 创建配置 - 启用验证测试修复后的验证逻辑
+    # 创建搜索器
     config = SearchConfig(
-        max_results=5,
-        timeout=20,
-        min_resolution=720,
-        enable_validation=True,  # 启用验证测试修复后的逻辑
-        enable_cache=True
+        max_results=10,
+        timeout=30,
+        enable_validation=True,
+        min_valid_links=3
     )
     
-    # 创建搜索器
-    searcher = create_tonkiang_searcher(config)
+    searcher = TonkiangSearcher(config)
+    print(f"搜索器信息: {searcher.get_searcher_info()}")
+    print()
     
     # 测试搜索
-    print(f"搜索器信息: {searcher.get_site_info()}")
+    test_keyword = "CCTV-1"
+    print(f"测试搜索: {test_keyword}")
     
-    test_keywords = ["CCTV-1"]
+    channels = searcher.search_channels(test_keyword)
     
-    for keyword in test_keywords:
-        print(f"\n测试搜索: {keyword}")
-        channels = searcher.search_channels(keyword)
-        
-        if channels:
-            print(f"找到 {len(channels)} 个频道:")
-            for i, ch in enumerate(channels[:10], 1):  # 显示前10个
-                print(f"  {i}. {ch.name} - {ch.resolution} - {ch.url}")
-        else:
-            print("  未找到结果")
+    print(f"找到 {len(channels)} 个频道:")
+    for i, channel in enumerate(channels, 1):
+        print(f"  {i}. {channel.name} - {channel.resolution} - {channel.url}")
     
-    print(f"\n缓存状态: {len(searcher._search_cache)} 个关键词已缓存")
+    # 显示缓存状态
+    cache_info = searcher.get_cache_info()
+    print(f"\n缓存状态: {cache_info['cached_keywords']} 个关键词已缓存")
     print("=" * 50)
