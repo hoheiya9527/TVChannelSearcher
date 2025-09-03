@@ -1,0 +1,130 @@
+name: 自动更新IPTV频道列表
+
+on:
+  schedule:
+    - cron: '0 22 * * *'
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: 
+      - 'Parser/**'
+      - '.github/workflows/**'
+
+jobs:
+  update-channels:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Parser
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+    
+    - name: 安装依赖包
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        else
+          pip install requests beautifulsoup4 lxml
+        fi
+    
+    - name: 显示环境信息
+      run: |
+        echo "Python版本: $(python --version)"
+        echo "当前目录内容:"
+        ls -la
+    
+    - name: 检查必要文件
+      run: |
+        echo "检查必要文件..."
+        for file in LiveChannel.txt modular_batch_processor.py searcher_interface.py tonkiang_searcher.py run_processor.py; do
+          if [ ! -f "$file" ]; then
+            echo "❌ 缺少文件: $file"
+            exit 1
+          else
+            echo "✅ 找到文件: $file"
+          fi
+        done
+    
+    - name: 备份原始文件
+      run: |
+        if [ -f result.txt ]; then
+          cp result.txt result_backup.txt
+          echo "✅ 已备份 result.txt"
+        else
+          echo "ℹ️ result.txt 不存在，跳过备份"
+        fi
+    
+    - name: 执行频道搜索
+      run: |
+        echo "🚀 开始执行频道搜索..."
+        echo "开始时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        timeout 5400 python run_processor.py
+        echo "✅ 搜索完成"
+    
+    - name: 检查结果文件
+      id: check_result
+      run: |
+        if [ ! -f result.txt ]; then
+          echo "❌ result.txt 文件未生成"
+          exit 1
+        fi
+        if [ ! -s result.txt ]; then
+          echo "❌ result.txt 文件为空"
+          exit 1
+        fi
+        line_count=$(wc -l < result.txt)
+        file_size=$(du -h result.txt | cut -f1)
+        group_count=$(grep -c "^[^,]*,$" result.txt || echo "0")
+        echo "📊 结果统计: 行数=$line_count, 大小=$file_size, 分组=$group_count"
+        echo "line_count=$line_count" >> $GITHUB_OUTPUT
+        echo "file_size=$file_size" >> $GITHUB_OUTPUT
+        echo "group_count=$group_count" >> $GITHUB_OUTPUT
+    
+    - name: 检查文件变化
+      id: check_changes
+      run: |
+        has_changes="false"
+        if [ ! -f result_backup.txt ]; then
+          echo "ℹ️ 首次运行"
+          has_changes="true"
+        else
+          if ! cmp -s result.txt result_backup.txt; then
+            echo "🔄 文件有变化"
+            has_changes="true"
+          else
+            echo "ℹ️ 文件无变化"
+          fi
+        fi
+        echo "has_changes=$has_changes" >> $GITHUB_OUTPUT
+    
+    - name: 配置Git
+      if: steps.check_changes.outputs.has_changes == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+    
+    - name: 提交更新
+      if: steps.check_changes.outputs.has_changes == 'true'
+      run: |
+        cd ..
+        git add Parser/result.txt
+        current_time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "频道分组: ${{ steps.check_result.outputs.group_count }} 个" -m "总链接数: ${{ steps.check_result.outputs.line_count }} 行" -m "文件大小: ${{ steps.check_result.outputs.file_size }}"
+        git push
+        echo "✅ 更新已提交"
+
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUNBUFFERED: 1
