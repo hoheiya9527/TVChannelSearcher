@@ -22,7 +22,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
     def __init__(self, config: SearchConfig = None):
         super().__init__(config)
         self.site_name = "Tonkiang.us"
-        self.base_url = "http://tonkiang.us"
+        self.base_url = "https://tonkiang.us"
         self._setup_session()
         self._last_request_time = 0
         
@@ -184,18 +184,16 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 构建请求URL（支持直接IP访问）
             if self.target_host_ip:
-                # 直接IP访问模式 - 强制使用HTTP避免SSL问题
+                # 直接IP访问模式
                 ip = self.target_host_ip
                 # IPv6地址需要用方括号包围
                 if ':' in ip and not ip.startswith('['):
                     ip = f"[{ip}]"
-                base_url = f"http://{ip}"  # 使用HTTP而不是HTTPS
+                base_url = f"https://{ip}"
                 self.session.headers['Host'] = 'tonkiang.us'  # 设置Host头
-                logger.debug(f"[{self.site_name}] 使用直接IP访问(HTTP): {ip}")
+                logger.debug(f"[{self.site_name}] 使用直接IP访问: {ip}")
             else:
-                # 正常域名访问也改用HTTP
-                base_url = "http://tonkiang.us"
-                logger.debug(f"[{self.site_name}] 使用HTTP协议访问")
+                base_url = self.base_url
             
             # 访问主页
             try:
@@ -220,7 +218,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
             search_data = {'seerch': keyword}
             
             # 更新请求头
-            origin_url = "http://tonkiang.us" if not self.target_host_ip else base_url
+            origin_url = "https://tonkiang.us" if not self.target_host_ip else base_url
             self.session.headers.update({
                 'Referer': f'{origin_url}/',
                 'Origin': origin_url,
@@ -233,8 +231,8 @@ class TonkiangSearcher(BaseIPTVSearcher):
                     logger.debug(f"[{self.site_name}] 第 {attempt} 次重试...")
                     if self.github_actions_mode:
                         # GitHub Actions 环境使用更长的重试延迟
-                        retry_delay = self.retry_delay + attempt * 30
-                        self._random_delay(retry_delay, retry_delay + 20)
+                        retry_delay = self.retry_delay + attempt * 45  # 增加延迟倍数
+                        self._random_delay(retry_delay, retry_delay + 30)  # 增加随机范围
                     else:
                         self._random_delay(5.0 + attempt * 2, 10.0 + attempt * 3)
                     self.session.headers['User-Agent'] = self._get_random_user_agent()
@@ -258,9 +256,9 @@ class TonkiangSearcher(BaseIPTVSearcher):
                         return content
                     elif response.status_code == 200:
                         logger.warning(f"[{self.site_name}] 内容过短({len(content)}字符)")
-                        # GitHub Actions 模式下，连续失败则快速跳过
-                        if self.github_actions_mode and attempt >= 1:
-                            logger.info(f"[{self.site_name}] 智能模式：快速失败，跳过 {keyword}")
+                        # GitHub Actions 模式下，给更多重试机会
+                        if self.github_actions_mode and attempt >= 2:  # 改为2次失败后才跳过
+                            logger.info(f"[{self.site_name}] 智能模式：多次失败，跳过 {keyword}")
                             break
                     elif response.status_code == 503:
                         logger.warning(f"[{self.site_name}] 服务不可用(503)")

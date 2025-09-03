@@ -86,76 +86,22 @@ jobs:
         # 尝试通过不同的DNS解析
         echo "🔄 尝试不同的DNS解析策略"
         
-        # 方法1: 直接IP访问（绕过DNS）
-        echo "🎯 方法1: 尝试直接IP访问..."
+        # GitHub Actions环境被拉黑，直接跳过搜索
+        echo "🚨 GitHub Actions环境被目标网站拉黑，无法进行实时搜索"
+        echo "💡 建议解决方案："
+        echo "   1. 使用本地环境执行: cd Parser && python run_processor.py"
+        echo "   2. 设置自托管Runner"
+        echo "   3. 使用其他CI/CD服务（如GitLab CI）"
+        echo ""
+        echo "⏭️  跳过搜索步骤，工作流结束"
         
-        # 尝试多种方式获取IPv4地址
-        TARGET_IP=""
+        # 创建空的结果文件，避免后续步骤报错
+        touch result.txt
+        echo "# GitHub Actions环境限制" > result.txt
+        echo "# 请使用本地环境执行搜索" >> result.txt
+        echo "# 执行命令: cd Parser && python run_processor.py" >> result.txt
         
-        # 方式1: 使用dig命令（优先IPv4）
-        if command -v dig >/dev/null 2>&1; then
-          TARGET_IP=$(dig +short A tonkiang.us @8.8.8.8 2>/dev/null | head -1)
-          echo "   dig解析结果: $TARGET_IP"
-        fi
-        
-        # 方式2: 使用nslookup（过滤IPv4）
-        if [ -z "$TARGET_IP" ]; then
-          TARGET_IP=$(nslookup tonkiang.us 8.8.8.8 2>/dev/null | grep 'Address:' | awk '{print $2}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-          echo "   nslookup解析结果: $TARGET_IP"
-        fi
-        
-        # 方式3: 使用host命令
-        if [ -z "$TARGET_IP" ] && command -v host >/dev/null 2>&1; then
-          TARGET_IP=$(host tonkiang.us 8.8.8.8 2>/dev/null | grep 'has address' | head -1 | awk '{print $4}')
-          echo "   host解析结果: $TARGET_IP"
-        fi
-        
-        if [ -n "$TARGET_IP" ] && [[ "$TARGET_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "   ✅ 获取到IPv4地址: $TARGET_IP"
-          export TARGET_HOST_IP="$TARGET_IP"
-          export SEARCH_DELAY=2
-          export MAX_WORKERS=1
-          export RETRY_DELAY=15
-          
-          if timeout 900 python run_processor.py; then
-            echo "✅ 直接IP访问成功！"
-            exit 0
-          else
-            echo "❌ 直接IP访问失败"
-          fi
-        else
-          echo "   ❌ 无法获取有效的IPv4地址"
-        fi
-        
-        # 方法2: 使用不同的User-Agent策略
-        echo "🎯 方法2: 移动端User-Agent伪装..."
-        export MOBILE_MODE=true
-        export SEARCH_DELAY=8
-        export MAX_WORKERS=1
-        export RETRY_DELAY=25
-        
-        if timeout 900 python run_processor.py; then
-          echo "✅ 移动端伪装成功！"
-          exit 0
-        else
-          echo "❌ 移动端伪装失败"
-        fi
-        
-        # 方法3: 极限保守策略
-        echo "🎯 方法3: 极限保守策略（单线程+长延迟）..."
-        export SEARCH_DELAY=15
-        export MAX_WORKERS=1
-        export RETRY_DELAY=45
-        
-        if timeout 1200 python run_processor.py; then
-          echo "✅ 保守策略成功！"
-          exit 0
-        else
-          echo "❌ 所有方法均失败"
-          echo "💡 建议: GitHub Actions环境可能被永久拉黑"
-          echo "💡 解决方案: 考虑使用自托管Runner或本地定时任务"
-          exit 1
-        fi
+        exit 1  # 让工作流失败，不进行无意义的提交
         
         echo "✅ 搜索阶段完成"
     
