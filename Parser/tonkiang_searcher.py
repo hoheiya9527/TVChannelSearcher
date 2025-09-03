@@ -26,6 +26,19 @@ class TonkiangSearcher(BaseIPTVSearcher):
         self._setup_session()
         self._last_request_time = 0
         
+        # GitHub Actions 环境优化
+        import os
+        if os.getenv('GITHUB_ACTIONS'):
+            logger.info(f"[{self.site_name}] 检测到GitHub Actions环境，启用保守模式")
+            self.github_actions_mode = True
+            # GitHub Actions 环境下使用更长的延迟
+            self.min_delay = float(os.getenv('SEARCH_DELAY', 15))  # 默认15秒间隔
+            self.retry_delay = float(os.getenv('RETRY_DELAY', 60))  # 默认60秒重试间隔
+        else:
+            self.github_actions_mode = False
+            self.min_delay = 3.0
+            self.retry_delay = 10.0
+        
         # 用户代理池
         self.USER_AGENTS = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -93,8 +106,13 @@ class TonkiangSearcher(BaseIPTVSearcher):
     
     def _batch_delay(self):
         """批量处理延迟"""
-        delay = random.uniform(3.0, 8.0)
-        logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒")
+        if self.github_actions_mode:
+            # GitHub Actions 环境使用更长延迟
+            delay = random.uniform(self.min_delay, self.min_delay + 10)
+            logger.debug(f"[{self.site_name}] GitHub Actions 批量延迟 {delay:.1f}秒")
+        else:
+            delay = random.uniform(3.0, 8.0)
+            logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒")
         time.sleep(delay)
     
     def _send_search_request(self, keyword: str, page: int = 1) -> Optional[str]:
@@ -103,7 +121,8 @@ class TonkiangSearcher(BaseIPTVSearcher):
             # 频率控制
             if hasattr(self, '_last_request_time'):
                 time_since_last = time.time() - self._last_request_time
-                if time_since_last < 5.0:
+                min_interval = self.min_delay if self.github_actions_mode else 5.0
+                if time_since_last < min_interval:
                     self._batch_delay()
             
             # 预热访问
@@ -141,7 +160,12 @@ class TonkiangSearcher(BaseIPTVSearcher):
             for attempt in range(4):
                 if attempt > 0:
                     logger.debug(f"[{self.site_name}] 第 {attempt} 次重试...")
-                    self._random_delay(5.0 + attempt * 2, 10.0 + attempt * 3)
+                    if self.github_actions_mode:
+                        # GitHub Actions 环境使用更长的重试延迟
+                        retry_delay = self.retry_delay + attempt * 30
+                        self._random_delay(retry_delay, retry_delay + 20)
+                    else:
+                        self._random_delay(5.0 + attempt * 2, 10.0 + attempt * 3)
                     self.session.headers['User-Agent'] = self._get_random_user_agent()
                 
                 try:

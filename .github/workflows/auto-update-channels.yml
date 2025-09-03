@@ -68,10 +68,30 @@ jobs:
       run: |
         echo "🚀 开始执行频道搜索..."
         echo "开始时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        timeout 5400 python run_processor.py
+        echo "GitHub Runner IP信息:"
+        curl -s https://httpbin.org/ip || echo "无法获取IP信息"
+        echo ""
+        
+        # GitHub Actions 环境优化配置
+        export SEARCH_DELAY=20  # 搜索间隔20秒（更保守）
+        export MAX_WORKERS=1    # 串行处理，避免并发请求
+        export RETRY_DELAY=60   # 重试间隔60秒
+        
+        # 其他优化选项
+        # 1. 使用不同的执行时间（避开高峰期）
+        echo "当前时间: $(date -u '+%H:%M')"
+        
+        # 2. 可选：使用代理（需要配置 secrets）
+        # if [ -n "${{ secrets.PROXY_URL }}" ]; then
+        #   export HTTP_PROXY="${{ secrets.PROXY_URL }}"
+        #   export HTTPS_PROXY="${{ secrets.PROXY_URL }}"
+        #   echo "使用代理: ${HTTP_PROXY}"
+        # fi
+        
+        timeout 7200 python run_processor.py  # 增加到2小时超时
         echo "✅ 搜索完成"
     
-    - name: 检查结果文件并设置变量
+    - name: 检查结果文件并验证质量
       id: check_result
       run: |
         if [ ! -f result.txt ]; then
@@ -87,15 +107,46 @@ jobs:
         file_size=$(du -h result.txt | cut -f1)
         group_count=$(grep -c "^[^,]*,$" result.txt 2>/dev/null || echo "0")
         
+        # 计算有效频道链接数（排除分组标题行）
+        valid_channel_count=$(grep -v "^[^,]*,$" result.txt | wc -l 2>/dev/null || echo "0")
+        
         # 确保变量值不为空
         line_count=${line_count:-0}
         file_size=${file_size:-"0B"}
         group_count=${group_count:-0}
+        valid_channel_count=${valid_channel_count:-0}
         
-        echo "📊 结果统计: 行数=$line_count, 大小=$file_size, 分组=$group_count"
+        echo "📊 结果统计: 总行数=$line_count, 文件大小=$file_size, 分组数=$group_count, 有效频道=$valid_channel_count"
+        
+        # 质量检查 - 设定最低标准
+        MIN_CHANNELS=50  # 最少需要50个有效频道
+        MIN_GROUPS=3     # 最少需要3个分组
+        
+        echo "🔍 质量检查..."
+        echo "- 有效频道数: $valid_channel_count (最低要求: $MIN_CHANNELS)"
+        echo "- 分组数: $group_count (最低要求: $MIN_GROUPS)"
+        
+        # 检查是否满足最低要求
+        if [ "$valid_channel_count" -lt "$MIN_CHANNELS" ]; then
+          echo "❌ 有效频道数不足 ($valid_channel_count < $MIN_CHANNELS)，跳过提交"
+          echo "QUALITY_CHECK=false" >> $GITHUB_ENV
+          exit 0
+        fi
+        
+        if [ "$group_count" -lt "$MIN_GROUPS" ]; then
+          echo "❌ 分组数不足 ($group_count < $MIN_GROUPS)，跳过提交"
+          echo "QUALITY_CHECK=false" >> $GITHUB_ENV
+          exit 0
+        fi
+        
+        echo "✅ 质量检查通过"
+        echo "QUALITY_CHECK=true" >> $GITHUB_ENV
+        echo "VALID_CHANNELS=$valid_channel_count" >> $GITHUB_ENV
+        echo "GROUPS=$group_count" >> $GITHUB_ENV
     
     - name: 检查文件变化
       id: check_changes
+      if: env.QUALITY_CHECK == 'true'
       run: |
         has_changes="false"
         if [ ! -f result_backup.txt ]; then
@@ -112,28 +163,31 @@ jobs:
         echo "HAS_CHANGES=$has_changes" >> $GITHUB_ENV
     
     - name: 配置Git
-      if: env.HAS_CHANGES == 'true'
+      if: env.QUALITY_CHECK == 'true' && env.HAS_CHANGES == 'true'
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
     
     - name: 提交更新
-      if: env.HAS_CHANGES == 'true'
+      if: env.QUALITY_CHECK == 'true' && env.HAS_CHANGES == 'true'
       run: |
         cd ..
         git add Parser/result.txt
         current_time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
         
-        # 重新计算统计信息用于提交消息
-        cd Parser
-        line_count=$(wc -l < result.txt 2>/dev/null || echo "0")
-        file_size=$(du -h result.txt 2>/dev/null | cut -f1 || echo "0B")
-        group_count=$(grep -c "^[^,]*,$" result.txt 2>/dev/null || echo "0")
-        cd ..
-        
-        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "频道分组: ${group_count} 个" -m "总链接数: ${line_count} 行" -m "文件大小: ${file_size}"
+        # 使用已验证的统计信息
+        git commit -m "🔄 自动更新IPTV频道列表 - $current_time" -m "✅ 质量检查通过" -m "有效频道: ${VALID_CHANNELS} 个" -m "频道分组: ${GROUPS} 个"
         git push
         echo "✅ 更新已提交"
+    
+    - name: 质量检查失败处理
+      if: env.QUALITY_CHECK == 'false'
+      run: |
+        echo "⚠️ 本次更新未提交，原因："
+        echo "- 解析到的有效频道数或分组数不足"
+        echo "- 建议检查搜索器状态或网络连接"
+        echo "- 下次定时任务将重新尝试"
+        exit 0
 
 env:
   PYTHONIOENCODING: utf-8
