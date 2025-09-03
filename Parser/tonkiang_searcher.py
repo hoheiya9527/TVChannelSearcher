@@ -110,7 +110,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
     
     def _parse_search_results(self, html_content: str, keyword: str) -> List[IPTVChannel]:
         """
-        解析 Tonkiang.us 的搜索结果，实现精准匹配
+        准确解析 Tonkiang.us 的搜索结果，匹配频道名称与对应链接
         
         Args:
             html_content: HTML响应内容
@@ -122,66 +122,279 @@ class TonkiangSearcher(BaseIPTVSearcher):
         channels = []
         
         try:
-            # 精准匹配频道名称 - 先尝试精准匹配，如果失败则使用宽松匹配
-            exact_match = self._is_exact_channel_match(html_content, keyword)
-            if not exact_match:
-                logger.info(f"[{self.site_name}] 精准匹配失败: {keyword}, 尝试宽松匹配")
-                # 宽松匹配：只要包含关键词即可
-                if keyword.lower() not in html_content.lower():
-                    logger.info(f"[{self.site_name}] 宽松匹配也失败: {keyword}, 未找到相关内容")
-                    return channels
-                else:
-                    logger.info(f"[{self.site_name}] 宽松匹配成功: {keyword}")
+            # 使用BeautifulSoup解析HTML结构
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # 方法1：查找包含频道名称的结构化数据
+            matched_channels = self._extract_structured_channels(soup, keyword)
+            if matched_channels:
+                channels.extend(matched_channels)
+                logger.info(f"[{self.site_name}] 结构化解析成功: {keyword}, 找到 {len(matched_channels)} 个匹配链接")
             else:
-                logger.info(f"[{self.site_name}] 精准匹配成功: {keyword}")
-            
-            # 使用正则表达式提取链接和分辨率信息
-            patterns = [
-                # 匹配 m3u8 链接模式
-                r'(https?://[^\s<>"\']+\.m3u8[^\s<>"\']*)',
-                # 匹配 ts 流链接
-                r'(https?://[^\s<>"\']+/[^\s<>"\']*\.ts[^\s<>"\']*)',
-                # 匹配其他流媒体链接
-                r'(https?://[^\s<>"\']+:[0-9]+/[^\s<>"\']*)',
-                # RTMP链接
-                r'(rtmp://[^\s<>"\']+)',
-                # RTSP链接  
-                r'(rtsp://[^\s<>"\']+)'
-            ]
-            
-            found_urls = set()
-            
-            for pattern in patterns:
-                matches = re.finditer(pattern, html_content, re.IGNORECASE)
-                for match in matches:
-                    url = match.group(1).strip()
-                    
-                    # 清理URL (移除HTML标签残留)
-                    url = re.sub(r'[<>"\'].*$', '', url)
-                    
-                    # 基本URL验证
-                    if self._is_valid_stream_url(url):
-                        found_urls.add(url)
-            
-            # 创建频道对象
-            for url in found_urls:
-                resolution = self._extract_resolution_from_url(url)
-                
-                channel = IPTVChannel(
-                    name=keyword,
-                    url=url,
-                    resolution=resolution,
-                    source=self.site_name
-                )
-                
-                channels.append(channel)
-            
-            logger.info(f"[{self.site_name}] 解析完成: {keyword}, 找到 {len(channels)} 个链接")
+                # 方法2：回退到文本模式解析
+                matched_channels = self._extract_text_based_channels(html_content, keyword)
+                if matched_channels:
+                    channels.extend(matched_channels)
+                    logger.info(f"[{self.site_name}] 文本解析成功: {keyword}, 找到 {len(matched_channels)} 个匹配链接")
+                else:
+                    logger.warning(f"[{self.site_name}] 未找到与频道名称匹配的链接: {keyword}")
             
         except Exception as e:
             logger.error(f"[{self.site_name}] 解析结果失败: {e}")
         
         return channels
+    
+    def _extract_structured_channels(self, soup, keyword: str) -> List[IPTVChannel]:
+        """
+        从HTML结构中提取频道信息（优先方法）
+        
+        Args:
+            soup: BeautifulSoup对象
+            keyword: 搜索关键词
+            
+        Returns:
+            List[IPTVChannel]: 匹配的频道列表
+        """
+        channels = []
+        
+        try:
+            # 查找可能包含频道信息的元素
+            # 常见的结构：<div>, <tr>, <li>, <p> 等包含频道名称和链接
+            potential_containers = soup.find_all(['div', 'tr', 'li', 'p', 'span', 'td'])
+            
+            for container in potential_containers:
+                text_content = container.get_text(strip=True)
+                
+                # 检查容器是否包含目标频道名称
+                if self._is_channel_name_match(text_content, keyword):
+                    # 在该容器及其附近查找流媒体链接
+                    links = self._find_streaming_links_in_container(container)
+                    
+                    for link in links:
+                        # 验证链接与频道名称的关联性
+                        if self._validate_channel_link_association(text_content, link, keyword):
+                            resolution = self._extract_resolution_from_context(container, link)
+                            
+                            channel = IPTVChannel(
+                                name=keyword,
+                                url=link,
+                                resolution=resolution,
+                                source=self.site_name
+                            )
+                            channels.append(channel)
+            
+        except Exception as e:
+            logger.debug(f"[{self.site_name}] 结构化解析异常: {e}")
+        
+        return channels
+    
+    def _extract_text_based_channels(self, html_content: str, keyword: str) -> List[IPTVChannel]:
+        """
+        基于文本模式提取频道信息（回退方法）
+        
+        Args:
+            html_content: HTML内容
+            keyword: 搜索关键词
+            
+        Returns:
+            List[IPTVChannel]: 匹配的频道列表
+        """
+        channels = []
+        
+        try:
+            # 按行分割内容
+            lines = html_content.split('\n')
+            
+            for i, line in enumerate(lines):
+                line = line.strip()
+                
+                # 检查当前行是否包含频道名称
+                if self._is_channel_name_match(line, keyword):
+                    # 在当前行及其前后几行中查找流媒体链接
+                    context_lines = []
+                    start_idx = max(0, i - 2)
+                    end_idx = min(len(lines), i + 3)
+                    
+                    for j in range(start_idx, end_idx):
+                        context_lines.append(lines[j])
+                    
+                    context_text = '\n'.join(context_lines)
+                    links = self._extract_streaming_urls(context_text)
+                    
+                    for link in links:
+                        if self._validate_channel_link_association(line, link, keyword):
+                            resolution = self._extract_resolution_from_url(link)
+                            
+                            channel = IPTVChannel(
+                                name=keyword,
+                                url=link,
+                                resolution=resolution,
+                                source=self.site_name
+                            )
+                            channels.append(channel)
+            
+        except Exception as e:
+            logger.debug(f"[{self.site_name}] 文本解析异常: {e}")
+        
+        return channels
+    
+    def _is_channel_name_match(self, text: str, keyword: str) -> bool:
+        """
+        检查文本是否包含匹配的频道名称
+        
+        Args:
+            text: 待检查的文本
+            keyword: 搜索关键词
+            
+        Returns:
+            bool: 是否匹配
+        """
+        if not text or not keyword:
+            return False
+        
+        text_lower = text.lower().strip()
+        keyword_lower = keyword.lower().strip()
+        
+        # 精确匹配
+        if keyword_lower in text_lower:
+            # 进一步验证是否为完整的频道名称匹配
+            return self._validate_exact_match(text, keyword, keyword_lower)
+        
+        return False
+    
+    def _find_streaming_links_in_container(self, container) -> List[str]:
+        """
+        在HTML容器中查找流媒体链接
+        
+        Args:
+            container: BeautifulSoup元素
+            
+        Returns:
+            List[str]: 找到的链接列表
+        """
+        links = []
+        
+        try:
+            # 查找href属性中的链接
+            for link_tag in container.find_all(['a', 'link'], href=True):
+                url = link_tag['href']
+                if self._is_valid_stream_url(url):
+                    links.append(url)
+            
+            # 查找文本中的链接
+            text_content = container.get_text()
+            text_links = self._extract_streaming_urls(text_content)
+            links.extend(text_links)
+            
+        except Exception as e:
+            logger.debug(f"[{self.site_name}] 容器链接提取异常: {e}")
+        
+        return list(set(links))  # 去重
+    
+    def _extract_streaming_urls(self, text: str) -> List[str]:
+        """
+        从文本中提取流媒体URL
+        
+        Args:
+            text: 文本内容
+            
+        Returns:
+            List[str]: URL列表
+        """
+        urls = []
+        
+        patterns = [
+            r'(https?://[^\s<>"\']+\.m3u8[^\s<>"\']*)',
+            r'(https?://[^\s<>"\']+/[^\s<>"\']*\.ts[^\s<>"\']*)',
+            r'(https?://[^\s<>"\']+:[0-9]+/[^\s<>"\']*)',
+            r'(rtmp://[^\s<>"\']+)',
+            r'(rtsp://[^\s<>"\']+)'
+        ]
+        
+        for pattern in patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                url = match.group(1).strip()
+                url = re.sub(r'[<>"\'].*$', '', url)  # 清理URL
+                
+                if self._is_valid_stream_url(url):
+                    urls.append(url)
+        
+        return urls
+    
+    def _validate_channel_link_association(self, context_text: str, link: str, keyword: str) -> bool:
+        """
+        验证链接与频道名称的关联性
+        
+        Args:
+            context_text: 上下文文本
+            link: 流媒体链接
+            keyword: 频道关键词
+            
+        Returns:
+            bool: 是否关联
+        """
+        # 基本验证：链接必须有效
+        if not self._is_valid_stream_url(link):
+            return False
+        
+        # 检查链接是否在频道名称附近出现
+        context_lower = context_text.lower()
+        keyword_lower = keyword.lower()
+        
+        # 如果上下文中包含频道名称，认为链接相关
+        if keyword_lower in context_lower:
+            return True
+        
+        # 检查链接URL中是否包含频道相关信息
+        link_lower = link.lower()
+        keyword_parts = keyword_lower.replace('-', '').replace(' ', '')
+        
+        if keyword_parts in link_lower.replace('-', '').replace('_', ''):
+            return True
+        
+        return False
+    
+    def _extract_resolution_from_context(self, container, link: str) -> str:
+        """
+        从上下文中提取分辨率信息
+        
+        Args:
+            container: HTML容器
+            link: 链接URL
+            
+        Returns:
+            str: 分辨率信息
+        """
+        try:
+            # 首先尝试从URL中提取
+            resolution = self._extract_resolution_from_url(link)
+            if resolution != "未知":
+                return resolution
+            
+            # 然后从容器文本中提取
+            text = container.get_text()
+            resolution_patterns = [
+                r'(\d{3,4})[px_-]?(\d{3,4})',
+                r'(\d{3,4})p',
+                r'(\d{3,4})P',
+            ]
+            
+            for pattern in resolution_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    if len(match.groups()) == 2:
+                        width, height = match.groups()
+                        return f"{width}x{height}"
+                    else:
+                        height = match.group(1)
+                        return f"{height}p"
+        
+        except Exception:
+            pass
+        
+        return "未知"
     
     def _is_exact_channel_match(self, html_content: str, keyword: str) -> bool:
         """
@@ -321,7 +534,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
     
     def _validate_link(self, channel: IPTVChannel) -> bool:
         """
-        快速验证链接的有效性（已优化为高效模式）
+        验证链接的有效性，包括速度测试（平衡效率和质量）
         
         Args:
             channel: 频道对象
@@ -333,83 +546,106 @@ class TonkiangSearcher(BaseIPTVSearcher):
             return True
         
         try:
-            # 快速HEAD请求检查链接可达性 - 减少超时时间
-            response = self.session.head(channel.url, timeout=2, allow_redirects=True)
+            # 第一步：快速连通性检查
+            try:
+                response = self.session.head(channel.url, timeout=3, allow_redirects=True)
+                status_code = response.status_code
+            except:
+                # HEAD失败时尝试GET请求的前几个字节
+                try:
+                    response = self.session.get(channel.url, timeout=3, allow_redirects=True, stream=True)
+                    status_code = response.status_code
+                    response.close()
+                except:
+                    logger.debug(f"[{self.site_name}] 连通性检查失败: {channel.url}")
+                    return False
             
-            # 宽松的状态码检查 - 大部分状态码都认为可能有效
-            if response.status_code in [200, 206, 302, 301, 403, 404]:
-                return True
-            elif response.status_code >= 500:
-                # 服务器错误，可能是临时问题
-                return True
-            else:
-                logger.debug(f"[{self.site_name}] 链接状态码: {response.status_code}")
-                return True  # 即使状态码异常，也认为可能有效
+            # 检查状态码
+            if status_code not in [200, 206, 302, 301]:
+                if status_code in [403, 404]:
+                    # 403/404可能是防盗链，继续进行速度测试
+                    logger.debug(f"[{self.site_name}] 状态码 {status_code}，继续速度测试")
+                else:
+                    logger.debug(f"[{self.site_name}] 无效状态码: {status_code}")
+                    return False
+            
+            # 第二步：速度测试（关键步骤）
+            speed_valid = self._test_download_speed(channel.url)
+            if not speed_valid:
+                logger.debug(f"[{self.site_name}] 速度测试未通过: {channel.url}")
+                return False
+            
+            return True
             
         except Exception as e:
-            # 任何异常都认为链接可能有效（网络问题、防盗链等）
-            logger.debug(f"[{self.site_name}] 快速验证异常（认为有效）: {e}")
-            return True
+            logger.debug(f"[{self.site_name}] 链接验证异常: {channel.url}: {e}")
+            return False
     
     def _test_download_speed(self, url: str) -> bool:
         """
-        测试链接下载速度
+        高效的链接速度测试（平衡质量和效率）
         
         Args:
             url: 链接URL
             
         Returns:
-            bool: 速度是否满足要求（>=50KB/s，降低要求）
+            bool: 速度是否满足要求（>=100KB/s）
         """
         try:
             import time
             
-            # 设置下载测试参数 - 降低要求
-            test_duration = 3  # 测试3秒
-            min_speed_kbps = 50  # 最小速度50KB/s（从200降低到50）
+            # 优化的测试参数
+            test_duration = 2  # 测试2秒（减少测试时间）
+            min_speed_kbps = 100  # 最小速度100KB/s（提高要求，过滤慢速链接）
+            min_test_bytes = 30720  # 最少下载30KB来判断速度
             
             start_time = time.time()
             downloaded_bytes = 0
             
             # 使用流式下载测试速度
-            with self.session.get(url, stream=True, timeout=8) as response:
-                # 更宽松的状态码检查
-                if response.status_code not in [200, 206, 302, 301]:
-                    logger.debug(f"[{self.site_name}] 速度测试状态码: {response.status_code}")
-                    return True  # 即使状态码不理想，也认为可能有效
+            with self.session.get(url, stream=True, timeout=5) as response:
+                # 检查响应状态
+                if response.status_code not in [200, 206]:
+                    logger.debug(f"[{self.site_name}] 速度测试状态码异常: {response.status_code}")
+                    return False
                 
-                for chunk in response.iter_content(chunk_size=4096):  # 减小chunk大小
+                for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         downloaded_bytes += len(chunk)
                         elapsed = time.time() - start_time
                         
-                        # 测试足够时间后计算速度
-                        if elapsed >= test_duration:
+                        # 如果已经下载足够数据，提前计算速度
+                        if downloaded_bytes >= min_test_bytes:
                             speed_kbps = (downloaded_bytes / 1024) / elapsed
-                            logger.debug(f"[{self.site_name}] 测试速度: {speed_kbps:.1f}KB/s")
-                            return speed_kbps >= min_speed_kbps
+                            is_fast_enough = speed_kbps >= min_speed_kbps
+                            logger.debug(f"[{self.site_name}] 速度测试: {speed_kbps:.1f}KB/s ({'通过' if is_fast_enough else '不通过'})")
+                            return is_fast_enough
                         
-                        # 如果下载了足够的数据（比如50KB），也可以提前判断
-                        if downloaded_bytes >= 51200:  # 50KB
-                            speed_kbps = (downloaded_bytes / 1024) / elapsed
-                            logger.debug(f"[{self.site_name}] 测试速度: {speed_kbps:.1f}KB/s")
-                            return speed_kbps >= min_speed_kbps
+                        # 如果测试时间已够，也进行判断
+                        if elapsed >= test_duration:
+                            if downloaded_bytes > 0:
+                                speed_kbps = (downloaded_bytes / 1024) / elapsed
+                                is_fast_enough = speed_kbps >= min_speed_kbps
+                                logger.debug(f"[{self.site_name}] 速度测试: {speed_kbps:.1f}KB/s ({'通过' if is_fast_enough else '不通过'})")
+                                return is_fast_enough
+                            else:
+                                logger.debug(f"[{self.site_name}] 速度测试: 无数据下载")
+                                return False
             
-            # 如果循环结束但没有足够数据，计算当前速度
+            # 如果循环结束，计算最终速度
             elapsed = time.time() - start_time
             if elapsed > 0 and downloaded_bytes > 0:
                 speed_kbps = (downloaded_bytes / 1024) / elapsed
-                logger.debug(f"[{self.site_name}] 最终速度: {speed_kbps:.1f}KB/s")
-                return speed_kbps >= min_speed_kbps
+                is_fast_enough = speed_kbps >= min_speed_kbps
+                logger.debug(f"[{self.site_name}] 最终速度: {speed_kbps:.1f}KB/s ({'通过' if is_fast_enough else '不通过'})")
+                return is_fast_enough
             
-            # 如果没有下载到数据，可能是链接问题，但不完全拒绝
-            logger.debug(f"[{self.site_name}] 速度测试无数据，但认为可能有效")
-            return True
+            logger.debug(f"[{self.site_name}] 速度测试: 无有效数据")
+            return False
             
         except Exception as e:
-            logger.debug(f"[{self.site_name}] 速度测试异常 {url}: {e}")
-            # 异常时认为链接可能有效（网络问题等）
-            return True
+            logger.debug(f"[{self.site_name}] 速度测试异常: {e}")
+            return False
     
     def _get_resolution_height(self, resolution: str) -> int:
         """

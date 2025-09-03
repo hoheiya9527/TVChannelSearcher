@@ -158,7 +158,7 @@ class BaseIPTVSearcher(ABC):
                 
                 # 收集验证结果，达到目标数量后停止
                 completed_count = 0
-                for future in as_completed(future_to_channel, timeout=10):  # 总超时10秒（从30秒减少到10秒）
+                for future in as_completed(future_to_channel, timeout=15):  # 总超时15秒（考虑速度测试需要时间）
                     channel = future_to_channel[future]
                     completed_count += 1
                     
