@@ -60,13 +60,12 @@ class TonkiangSearcher(BaseIPTVSearcher):
     def _random_delay(self, min_delay: float = 1.0, max_delay: float = 3.0) -> None:
         """随机延迟，模拟人类行为"""
         delay = random.uniform(min_delay, max_delay)
-        logger.debug(f"[{self.site_name}] 随机延迟 {delay:.1f}秒...")
         time.sleep(delay)
     
     def _batch_delay(self) -> None:
         """批量处理时的额外延迟，避免请求过于频繁"""
         delay = random.uniform(3.0, 8.0)  # 批量处理时更长的延迟
-        logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒...")
+        logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒")
         time.sleep(delay)
     
     def _setup_session(self):
@@ -94,7 +93,6 @@ class TonkiangSearcher(BaseIPTVSearcher):
         
         # 使用随机用户代理和完整的请求头模拟真实浏览器
         random_ua = self._get_random_user_agent()
-        logger.debug(f"[{self.site_name}] 使用用户代理: {random_ua[:50]}...")
         
         self.session.headers.update({
             'User-Agent': random_ua,
@@ -135,7 +133,6 @@ class TonkiangSearcher(BaseIPTVSearcher):
             if hasattr(self, '_last_request_time'):
                 time_since_last = time.time() - self._last_request_time
                 if time_since_last < 5.0:  # 如果距离上次请求少于5秒
-                    logger.debug(f"[{self.site_name}] 检测到频繁请求，增加批量延迟...")
                     self._batch_delay()
             
             # 第二步：随机延迟开始，避免请求过于规律
@@ -151,7 +148,6 @@ class TonkiangSearcher(BaseIPTVSearcher):
                 'Referer': '',  # 模拟直接访问
                 'Sec-Fetch-Site': 'none',
             })
-            logger.debug(f"[{self.site_name}] 更新用户代理: {new_ua[:50]}...")
             
             homepage_response = self.session.get(
                 self.base_url, 
@@ -160,10 +156,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
             )
             
             if homepage_response.status_code == 200:
-                logger.debug(f"[{self.site_name}] 主页访问成功，获取到cookies")
-                # 检查是否有有效的cookies
-                if self.session.cookies:
-                    logger.debug(f"[{self.site_name}] 获得 {len(self.session.cookies)} 个cookies")
+                logger.debug(f"[{self.site_name}] 主页访问成功")
             elif homepage_response.status_code == 503:
                 logger.warning(f"[{self.site_name}] 主页访问被拦截(503)，尝试更长延迟...")
                 self._batch_delay()  # 使用批量延迟
@@ -199,34 +192,18 @@ class TonkiangSearcher(BaseIPTVSearcher):
                 }
             )
             
-            logger.debug(f"[{self.site_name}] 搜索响应状态码: {response.status_code}")
-            
             if response.status_code == 200:
                 logger.info(f"[{self.site_name}] 搜索请求成功: {keyword}")
-                # 调试：检查响应信息
-                logger.debug(f"[{self.site_name}] 响应编码: {response.encoding}")
-                logger.debug(f"[{self.site_name}] Content-Type: {response.headers.get('Content-Type')}")
-                logger.debug(f"[{self.site_name}] Content-Encoding: {response.headers.get('Content-Encoding')}")
                 
                 # 确保正确解码内容
                 if response.encoding is None:
                     response.encoding = 'utf-8'
                 content = response.text
-                logger.debug(f"[{self.site_name}] 返回内容长度: {len(content)} 字符")
+                
+                # 简单的内容验证
                 if len(content) < 1000:
-                    logger.warning(f"[{self.site_name}] 返回内容过短，可能被反爬虫拦截: {content[:200]}...")
-                elif 'About' in content and 'results' in content:
-                    logger.debug(f"[{self.site_name}] 检测到正常搜索结果页面")
-                elif 'tba' in content or 'resultplus' in content or 'search' in content.lower():
-                    logger.debug(f"[{self.site_name}] 检测到可能的搜索结果页面")
-                else:
-                    logger.warning(f"[{self.site_name}] 返回内容不像搜索结果页面")
-                    # 打印内容的前200字符用于调试
-                    logger.debug(f"[{self.site_name}] 内容预览: {content[:200]}")
-                    # 保存异常内容用于调试
-                    with open('debug_response.html', 'w', encoding='utf-8') as f:
-                        f.write(content)
-                    logger.debug(f"[{self.site_name}] 异常响应已保存到 debug_response.html")
+                    logger.warning(f"[{self.site_name}] 返回内容过短，可能被反爬虫拦截")
+                
                 # 记录请求时间，用于批量处理延迟控制
                 self._last_request_time = time.time()
                 return content
@@ -243,7 +220,6 @@ class TonkiangSearcher(BaseIPTVSearcher):
                     # 更换用户代理
                     new_ua = self._get_random_user_agent()
                     self.session.headers.update({'User-Agent': new_ua})
-                    logger.debug(f"[{self.site_name}] 重试时更换用户代理: {new_ua[:50]}...")
                     
                     try:
                         retry_response = self.session.post(
@@ -309,7 +285,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 查找所有 tba 标签（这是最稳定的特征，包含流媒体链接）
             tba_elements = soup.find_all('tba')
-            logger.debug(f"[{self.site_name}] 找到 {len(tba_elements)} 个tba标签")
+            logger.debug(f"[{self.site_name}] 找到 {len(tba_elements)} 个流媒体链接")
             
             for tba in tba_elements:
                 try:
@@ -321,12 +297,10 @@ class TonkiangSearcher(BaseIPTVSearcher):
                         continue
                     
                     stream_url = tba_text
-                    logger.debug(f"[{self.site_name}] 找到流媒体URL: {stream_url}")
                     
                     # 向上查找包含频道名称的容器
                     channel_name = self._find_channel_name_near_tba(tba, keyword)
                     if not channel_name:
-                        logger.debug(f"[{self.site_name}] 未找到匹配的频道名称")
                         continue
                     
                     # 验证找到的频道名称是否真的匹配搜索关键词
@@ -345,7 +319,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
                         source=self.site_name
                     )
                     channels.append(channel)
-                    logger.debug(f"[{self.site_name}] 添加频道: 搜索'{keyword}' -> 找到'{channel_name}' [{resolution}] - {stream_url[:50]}...")
+                    logger.debug(f"[{self.site_name}] 添加频道: {channel_name} [{resolution}]")
                     
                 except Exception as e:
                     logger.debug(f"[{self.site_name}] 解析单个tba异常: {e}")
@@ -438,7 +412,6 @@ class TonkiangSearcher(BaseIPTVSearcher):
                         # 检查是否看起来像频道名称
                         if any(pattern in text.lower() for pattern in ['cctv', '卫视', 'tv', '频道']):
                             potential_names.append(text)
-                            logger.debug(f"[{self.site_name}] 找到潜在频道名称: {text}")
                 
                 # 如果找到了潜在的频道名称，返回第一个
                 if potential_names:
