@@ -604,18 +604,41 @@ def main():
         print(f"  - {name}")
     print()
     
-    # 创建配置 - 高效模式
-    config = ProcessorConfig(
-        searcher_name="tonkiang",           # 默认使用 tonkiang 搜索器
-        max_results_per_channel=10,         # 每频道最大10个链接
-        search_timeout=10,                  # 10秒搜索超时（从15秒减少）
-        min_resolution=0,                   # 不限制分辨率
-        enable_validation=True,             # 启用快速链接验证
-        enable_cache=True,                  # 启用缓存
-        concurrent_groups=3,                # 3个分组并发（从2增加）
-        max_workers_per_group=8,            # 每分组8个并发（从4增加）
-        min_valid_links=3                   # 3个有效链接就够了（快速模式）
-    )
+    # 根据环境创建配置
+    if os.getenv('GITHUB_ACTIONS'):
+        print("🔧 检测到GitHub Actions环境，启用保守配置")
+        
+        # 读取环境变量配置
+        max_workers = int(os.getenv('MAX_WORKERS', 1))
+        search_delay = int(os.getenv('SEARCH_DELAY', 20))
+        
+        print(f"   - 并发数: {max_workers}")
+        print(f"   - 搜索延迟: {search_delay}秒")
+        
+        config = ProcessorConfig(
+            searcher_name="tonkiang",
+            max_results_per_channel=3,      # 进一步减少链接数
+            search_timeout=60,              # 增加搜索超时到60秒
+            min_resolution=0,
+            enable_validation=True,
+            enable_cache=True,
+            concurrent_groups=1,            # 串行处理分组
+            max_workers_per_group=max_workers,  # 使用环境变量
+            min_valid_links=2               # 降低有效链接要求
+        )
+    else:
+        print("🔧 本地环境，使用高效配置")
+        config = ProcessorConfig(
+            searcher_name="tonkiang",
+            max_results_per_channel=10,
+            search_timeout=10,
+            min_resolution=0,
+            enable_validation=True,
+            enable_cache=True,
+            concurrent_groups=3,
+            max_workers_per_group=8,
+            min_valid_links=3
+        )
     
     # 创建并运行处理器
     processor = ModularBatchProcessor(config)

@@ -126,8 +126,13 @@ class TonkiangSearcher(BaseIPTVSearcher):
                     self._batch_delay()
             
             # 预热访问
-            self._random_delay(1.0, 3.0)
-            logger.debug(f"[{self.site_name}] 预热访问主页...")
+            if self.github_actions_mode:
+                # GitHub Actions 环境下更长的预热延迟
+                self._random_delay(5.0, 10.0)
+                logger.debug(f"[{self.site_name}] GitHub Actions 预热访问主页...")
+            else:
+                self._random_delay(1.0, 3.0)
+                logger.debug(f"[{self.site_name}] 预热访问主页...")
             
             # 更新用户代理
             self.session.headers['User-Agent'] = self._get_random_user_agent()
@@ -143,8 +148,13 @@ class TonkiangSearcher(BaseIPTVSearcher):
                 logger.warning(f"[{self.site_name}] 主页访问异常: {e}")
             
             # 搜索请求
-            self._random_delay(2.0, 5.0)
-            logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
+            if self.github_actions_mode:
+                # GitHub Actions 环境下更长的搜索延迟
+                self._random_delay(10.0, 20.0)
+                logger.debug(f"[{self.site_name}] GitHub Actions 发送搜索请求: {keyword}")
+            else:
+                self._random_delay(2.0, 5.0)
+                logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
             
             search_url = f"{self.base_url}/"
             search_data = {'seerch': keyword}
