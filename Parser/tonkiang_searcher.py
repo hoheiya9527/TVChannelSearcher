@@ -83,14 +83,18 @@ class TonkiangSearcher(BaseIPTVSearcher):
     
     def _setup_session(self):
         """设置HTTP会话"""
+        # 全局禁用SSL警告
+        import urllib3
+        import ssl
+        urllib3.disable_warnings()
+        
         self.session = requests.Session()
         
         # 完全禁用SSL证书验证
         self.session.verify = False
         
-        # 禁用SSL警告
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        # 设置SSL上下文 - 完全禁用SSL验证
+        self.session.trust_env = False
         
         # 设置重试策略 - 减少重试次数和日志
         retry_strategy = Retry(
@@ -99,7 +103,16 @@ class TonkiangSearcher(BaseIPTVSearcher):
             status_forcelist=[429, 500, 502, 503, 504],
             raise_on_status=False  # 不抛出状态异常
         )
-        adapter = HTTPAdapter(
+        
+        # 创建自定义适配器，强制禁用SSL验证
+        class NoSSLAdapter(HTTPAdapter):
+            def init_poolmanager(self, *args, **kwargs):
+                kwargs['ssl_context'] = ssl.create_default_context()
+                kwargs['ssl_context'].check_hostname = False
+                kwargs['ssl_context'].verify_mode = ssl.CERT_NONE
+                return super().init_poolmanager(*args, **kwargs)
+        
+        adapter = NoSSLAdapter(
             max_retries=retry_strategy,
             pool_connections=50,
             pool_maxsize=50
