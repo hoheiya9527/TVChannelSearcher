@@ -606,7 +606,7 @@ def main():
         max_results_per_channel=10,         # 每频道最大10个链接
         search_timeout=15,                  # 15秒搜索超时
         min_resolution=0,                   # 不限制分辨率
-        enable_validation=True,             # 启用链接验证
+        enable_validation=True,             # 启用链接验证（已调整为更宽松）
         enable_cache=True,                  # 启用缓存
         concurrent_groups=2,                # 2个分组并发
         max_workers_per_group=4,            # 每分组4个并发

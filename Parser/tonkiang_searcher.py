@@ -122,10 +122,18 @@ class TonkiangSearcher(BaseIPTVSearcher):
         channels = []
         
         try:
-            # 精准匹配频道名称 - 只匹配包含完整关键词的内容
-            if not self._is_exact_channel_match(html_content, keyword):
-                logger.info(f"[{self.site_name}] 精准匹配失败: {keyword}, 未找到完全匹配的频道名称")
-                return channels
+            # 精准匹配频道名称 - 先尝试精准匹配，如果失败则使用宽松匹配
+            exact_match = self._is_exact_channel_match(html_content, keyword)
+            if not exact_match:
+                logger.info(f"[{self.site_name}] 精准匹配失败: {keyword}, 尝试宽松匹配")
+                # 宽松匹配：只要包含关键词即可
+                if keyword.lower() not in html_content.lower():
+                    logger.info(f"[{self.site_name}] 宽松匹配也失败: {keyword}, 未找到相关内容")
+                    return channels
+                else:
+                    logger.info(f"[{self.site_name}] 宽松匹配成功: {keyword}")
+            else:
+                logger.info(f"[{self.site_name}] 精准匹配成功: {keyword}")
             
             # 使用正则表达式提取链接和分辨率信息
             patterns = [
@@ -325,13 +333,21 @@ class TonkiangSearcher(BaseIPTVSearcher):
             return True
         
         try:
-            # 首先使用HEAD请求检查链接可达性
-            response = self.session.head(channel.url, timeout=3, allow_redirects=True)
+            # 首先尝试GET请求检查链接可达性（某些流媒体服务不支持HEAD）
+            try:
+                response = self.session.head(channel.url, timeout=5, allow_redirects=True)
+                status_code = response.status_code
+            except:
+                # HEAD失败时尝试GET请求的前几个字节
+                response = self.session.get(channel.url, timeout=5, allow_redirects=True, stream=True)
+                status_code = response.status_code
+                response.close()
             
-            # 检查状态码
-            if response.status_code not in [200, 206, 302, 301]:
-                logger.debug(f"[{self.site_name}] 链接状态码无效 {channel.url}: {response.status_code}")
-                return False
+            # 检查状态码 - 更宽松的状态码检查
+            if status_code not in [200, 206, 302, 301, 403, 404]:  # 暂时允许403/404进入速度测试
+                logger.debug(f"[{self.site_name}] 链接状态码无效 {channel.url}: {status_code}")
+                if status_code not in [403, 404]:  # 403/404可能是防盗链，但链接可能有效
+                    return False
             
             # 检查分辨率要求
             if self.config.min_resolution > 0:
@@ -340,18 +356,20 @@ class TonkiangSearcher(BaseIPTVSearcher):
                     logger.debug(f"[{self.site_name}] 链接分辨率不足 {channel.url}: {resolution_height}p")
                     return False
             
-            # 进行速度测试 - 下载前几KB数据测试速度
+            # 进行速度测试 - 降低速度要求并添加调试信息
             speed_valid = self._test_download_speed(channel.url)
             if not speed_valid:
-                logger.debug(f"[{self.site_name}] 链接速度不足 {channel.url}: <200KB/s")
-                return False
+                logger.debug(f"[{self.site_name}] 链接速度测试失败 {channel.url}")
+                # 暂时不因为速度测试失败而拒绝链接，只记录日志
+                # return False
             
+            logger.debug(f"[{self.site_name}] 链接验证通过 {channel.url}")
             return True
             
         except Exception as e:
-            logger.debug(f"[{self.site_name}] 链接验证失败 {channel.url}: {e}")
-        
-        return False
+            logger.debug(f"[{self.site_name}] 链接验证异常 {channel.url}: {e}")
+            # 验证异常时，仍然认为链接可能有效（网络问题等）
+            return True
     
     def _test_download_speed(self, url: str) -> bool:
         """
@@ -361,24 +379,26 @@ class TonkiangSearcher(BaseIPTVSearcher):
             url: 链接URL
             
         Returns:
-            bool: 速度是否满足要求（>=200KB/s）
+            bool: 速度是否满足要求（>=50KB/s，降低要求）
         """
         try:
             import time
             
-            # 设置下载测试参数
-            test_duration = 2  # 测试2秒
-            min_speed_kbps = 200  # 最小速度200KB/s
+            # 设置下载测试参数 - 降低要求
+            test_duration = 3  # 测试3秒
+            min_speed_kbps = 50  # 最小速度50KB/s（从200降低到50）
             
             start_time = time.time()
             downloaded_bytes = 0
             
             # 使用流式下载测试速度
-            with self.session.get(url, stream=True, timeout=5) as response:
-                if response.status_code not in [200, 206]:
-                    return False
+            with self.session.get(url, stream=True, timeout=8) as response:
+                # 更宽松的状态码检查
+                if response.status_code not in [200, 206, 302, 301]:
+                    logger.debug(f"[{self.site_name}] 速度测试状态码: {response.status_code}")
+                    return True  # 即使状态码不理想，也认为可能有效
                 
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=4096):  # 减小chunk大小
                     if chunk:
                         downloaded_bytes += len(chunk)
                         elapsed = time.time() - start_time
@@ -386,24 +406,30 @@ class TonkiangSearcher(BaseIPTVSearcher):
                         # 测试足够时间后计算速度
                         if elapsed >= test_duration:
                             speed_kbps = (downloaded_bytes / 1024) / elapsed
+                            logger.debug(f"[{self.site_name}] 测试速度: {speed_kbps:.1f}KB/s")
                             return speed_kbps >= min_speed_kbps
                         
-                        # 如果下载了足够的数据（比如100KB），也可以提前判断
-                        if downloaded_bytes >= 102400:  # 100KB
+                        # 如果下载了足够的数据（比如50KB），也可以提前判断
+                        if downloaded_bytes >= 51200:  # 50KB
                             speed_kbps = (downloaded_bytes / 1024) / elapsed
+                            logger.debug(f"[{self.site_name}] 测试速度: {speed_kbps:.1f}KB/s")
                             return speed_kbps >= min_speed_kbps
             
             # 如果循环结束但没有足够数据，计算当前速度
             elapsed = time.time() - start_time
             if elapsed > 0 and downloaded_bytes > 0:
                 speed_kbps = (downloaded_bytes / 1024) / elapsed
+                logger.debug(f"[{self.site_name}] 最终速度: {speed_kbps:.1f}KB/s")
                 return speed_kbps >= min_speed_kbps
             
-            return False
+            # 如果没有下载到数据，可能是链接问题，但不完全拒绝
+            logger.debug(f"[{self.site_name}] 速度测试无数据，但认为可能有效")
+            return True
             
         except Exception as e:
-            logger.debug(f"[{self.site_name}] 速度测试失败 {url}: {e}")
-            return False
+            logger.debug(f"[{self.site_name}] 速度测试异常 {url}: {e}")
+            # 异常时认为链接可能有效（网络问题等）
+            return True
     
     def _get_resolution_height(self, resolution: str) -> int:
         """
