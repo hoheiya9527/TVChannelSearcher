@@ -126,23 +126,25 @@ class BaseIPTVSearcher(ABC):
         """
         pass
     
-    def _validate_links_concurrent(self, channels: List[IPTVChannel]) -> List[IPTVChannel]:
+    def _validate_links_concurrent(self, channels: List[IPTVChannel], remaining_needed: int = None) -> List[IPTVChannel]:
         """
         并发验证多个链接的有效性，达到目标数量后停止
         
         Args:
             channels: 待验证的频道列表
+            remaining_needed: 还需要找到的有效链接数，如果为None则使用默认的min_valid_links
             
         Returns:
             List[IPTVChannel]: 验证通过的频道列表
         """
         if not self.config.enable_validation or not channels:
-            return channels[:self.config.min_valid_links]  # 如果不验证，也返回限定数量
+            needed = remaining_needed if remaining_needed is not None else self.config.min_valid_links
+            return channels[:needed]  # 如果不验证，也返回限定数量
         
         valid_channels = []
         # 限制并发数，避免过高并发导致问题
         max_workers = min(self.config.concurrent_workers, len(channels), 8)
-        target_count = self.config.min_valid_links
+        target_count = remaining_needed if remaining_needed is not None else self.config.min_valid_links
         
         logger.info(f"[{self.site_name}] 开始并发验证 {len(channels)} 个链接 (目标: {target_count} 个有效链接)")
         
@@ -227,13 +229,21 @@ class BaseIPTVSearcher(ABC):
                 
                 # 链接验证 - 改为并发验证
                 if self.config.enable_validation:
-                    valid_channels = self._validate_links_concurrent(page_channels)
-                    logger.info(f"[{self.site_name}] 第 {page} 页: {len(page_channels)} 个链接，{len(valid_channels)} 个有效")
-                    all_channels.extend(valid_channels)
+                    # 计算还需要多少个有效链接
+                    remaining_needed = max(0, self.config.min_valid_links - len(all_channels))
                     
-                    # 如果已达到最少有效链接数要求，提前结束搜索
-                    if len(all_channels) >= self.config.min_valid_links:
-                        logger.info(f"[{self.site_name}] 已达到目标链接数({len(all_channels)}/{self.config.min_valid_links})，停止搜索")
+                    if remaining_needed > 0:
+                        valid_channels = self._validate_links_concurrent(page_channels, remaining_needed)
+                        logger.info(f"[{self.site_name}] 第 {page} 页: {len(page_channels)} 个链接，{len(valid_channels)} 个有效")
+                        all_channels.extend(valid_channels)
+                        
+                        # 如果已达到最少有效链接数要求，提前结束搜索
+                        if len(all_channels) >= self.config.min_valid_links:
+                            logger.info(f"[{self.site_name}] 已达到目标链接数({len(all_channels)}/{self.config.min_valid_links})，停止搜索")
+                            break
+                    else:
+                        # 如果已经足够了，跳过验证
+                        logger.info(f"[{self.site_name}] 已有足够链接({len(all_channels)}/{self.config.min_valid_links})，跳过第 {page} 页验证")
                         break
                 else:
                     all_channels.extend(page_channels)
