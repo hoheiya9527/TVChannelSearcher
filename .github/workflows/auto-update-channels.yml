@@ -1,72 +1,55 @@
 name: 自动更新IPTV频道列表
 
-# 触发条件
 on:
-  # 定时执行：每天两次自动执行（北京时间）
   schedule:
     - cron: '0 22 * * *'  # UTC 22:00（北京时间06:00）
     - cron: '0 8 * * *'   # UTC 08:00（北京时间16:00）
-  
-  # 手动触发
   workflow_dispatch:
-  
-  # 推送到主分支时触发（用于测试）
   push:
     branches: [ main ]
     paths: 
       - 'Parser/**'
       - '.github/workflows/**'
 
-# 工作流任务
 jobs:
   update-channels:
     runs-on: ubuntu-latest
-    
-    # 设置工作目录为Parser文件夹
     defaults:
       run:
         working-directory: ./Parser
     
     steps:
-    # 检出代码
     - name: 📥 检出代码
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
     
-    # 设置Python环境
     - name: 🐍 设置Python环境
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
         cache: 'pip'
     
-    # 安装Python依赖
     - name: 📦 安装依赖包
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then
           pip install -r requirements.txt
         else
-          echo "⚠️ requirements.txt 文件不存在，使用默认依赖"
+          echo "安装默认依赖"
           pip install requests beautifulsoup4 lxml
         fi
     
-    # 显示环境信息
     - name: ℹ️ 显示环境信息
       run: |
-        echo "🔧 Python版本: $(python --version)"
-        echo "📦 已安装的包:"
-        pip list
-        echo "📁 当前目录内容:"
+        echo "Python版本: $(python --version)"
+        echo "当前目录内容:"
         ls -la
     
-    # 检查必要文件
     - name: 🔍 检查必要文件
       run: |
-        echo "📋 检查必要文件..."
+        echo "检查必要文件..."
         files=("LiveChannel.txt" "modular_batch_processor.py" "searcher_interface.py" "tonkiang_searcher.py" "run_processor.py")
-        
         missing_files=()
         for file in "${files[@]}"; do
           if [ ! -f "$file" ]; then
@@ -75,48 +58,36 @@ jobs:
             echo "✅ 找到文件: $file"
           fi
         done
-        
         if [ ${#missing_files[@]} -ne 0 ]; then
-          echo "❌ 缺少以下文件:"
+          echo "❌ 缺少文件:"
           printf '%s\n' "${missing_files[@]}"
           exit 1
-        else
-          echo "✅ 所有必要文件都存在"
         fi
     
-    # 备份原始结果文件
     - name: 💾 备份原始文件
       run: |
         if [ -f result.txt ]; then
           cp result.txt result_backup.txt
           echo "✅ 已备份 result.txt"
-          echo "📊 原始文件统计:"
-          wc -l result.txt || echo "无法统计行数"
         else
           echo "ℹ️ result.txt 不存在，跳过备份"
         fi
     
-    # 执行频道搜索
     - name: 🔍 执行频道搜索
       run: |
         echo "🚀 开始执行频道搜索..."
-        echo "⏰ 开始时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        
-        # 设置超时时间（30分钟）
+        echo "开始时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
         timeout 1800 python run_processor.py || {
           exit_code=$?
           if [ $exit_code -eq 124 ]; then
-            echo "⏰ 执行超时（30分钟），可能网络较慢或频道过多"
+            echo "执行超时（30分钟）"
           else
-            echo "❌ 执行失败，退出码: $exit_code"
+            echo "执行失败，退出码: $exit_code"
           fi
           exit $exit_code
         }
-        
         echo "✅ 搜索完成"
-        echo "⏰ 完成时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
     
-    # 检查结果文件
     - name: 📊 检查结果文件
       id: check_result
       run: |
@@ -124,140 +95,63 @@ jobs:
           echo "❌ result.txt 文件未生成"
           exit 1
         fi
-        
-        # 检查文件是否为空
         if [ ! -s result.txt ]; then
           echo "❌ result.txt 文件为空"
           exit 1
         fi
-        
-        # 统计信息
         line_count=$(wc -l < result.txt)
         file_size=$(du -h result.txt | cut -f1)
         group_count=$(grep -c "^[^,]*,$" result.txt || echo "0")
-        
-        echo "📊 生成的结果文件统计:"
+        echo "📊 结果文件统计:"
         echo "- 总行数: $line_count"
         echo "- 文件大小: $file_size"
         echo "- 频道分组: $group_count"
-        
-        # 输出变量供后续步骤使用
         echo "line_count=$line_count" >> $GITHUB_OUTPUT
         echo "file_size=$file_size" >> $GITHUB_OUTPUT
         echo "group_count=$group_count" >> $GITHUB_OUTPUT
-        
-        # 检查是否有有效链接
-        if [ $line_count -lt 5 ]; then
-          echo "⚠️ 结果文件内容较少，可能搜索未成功"
-        else
-          echo "✅ 结果文件生成成功"
-        fi
     
-    # 比较文件变化
     - name: 🔄 检查文件变化
       id: check_changes
       run: |
         has_changes="false"
-        
         if [ ! -f result_backup.txt ]; then
-          echo "ℹ️ 首次运行，没有备份文件进行比较"
+          echo "ℹ️ 首次运行，没有备份文件"
           has_changes="true"
         else
-          # 比较文件内容（忽略时间戳行）
           if ! diff -q <(grep -v "^更新时间" result.txt) <(grep -v "^更新时间" result_backup.txt) > /dev/null; then
-            echo "🔄 检测到文件内容变化"
-            
-            # 显示变化统计
-            old_lines=$(wc -l < result_backup.txt)
-            new_lines=$(wc -l < result.txt)
-            echo "📊 变化统计:"
-            echo "- 原始行数: $old_lines"
-            echo "- 新的行数: $new_lines"
-            echo "- 变化量: $((new_lines - old_lines))"
-            
+            echo "🔄 检测到文件变化"
             has_changes="true"
           else
-            echo "ℹ️ 文件内容无变化，跳过提交"
+            echo "ℹ️ 文件内容无变化"
           fi
         fi
-        
         echo "has_changes=$has_changes" >> $GITHUB_OUTPUT
     
-    # 配置Git用户
     - name: ⚙️ 配置Git用户
       if: steps.check_changes.outputs.has_changes == 'true'
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
     
-    # 提交更新
     - name: 📤 提交更新
       if: steps.check_changes.outputs.has_changes == 'true'
       run: |
-        # 切换到项目根目录
         cd ..
-        
-        # 添加更新的文件
         git add Parser/result.txt
-        
-        # 生成提交信息
         current_time=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        beijing_time=$(date -d "+8 hours" '+%Y-%m-%d %H:%M:%S CST')
-        
-        commit_message="🔄 自动更新IPTV频道列表 - $current_time
+        commit_message="🔄 自动更新IPTV频道列表 - ${current_time}
 
 📊 更新统计:
-- 频道分组: ${{ steps.check_result.outputs.group_count }} 个  
-- 总链接数: ${{ steps.check_result.outputs.line_count }} 行
+- 频道分组: ${{ steps.check_result.outputs.group_count }} 个
+- 总链接数: ${{ steps.check_result.outputs.line_count }} 行  
 - 文件大小: ${{ steps.check_result.outputs.file_size }}
-- 更新时间: $current_time
-- 北京时间: $beijing_time
+- 更新时间: ${current_time}
 
 🤖 此提交由 GitHub Actions 自动生成"
-        
-        echo "📝 提交信息:"
-        echo "$commit_message"
-        
         git commit -m "$commit_message"
         git push
-        
-        echo "✅ 更新已成功提交到仓库"
-    
-    # 工作流摘要
-    - name: 📋 生成执行摘要
-      if: always()
-      run: |
-        echo "## 🎯 IPTV频道搜索执行摘要" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📊 执行结果" >> $GITHUB_STEP_SUMMARY
-        
-        if [ -f result.txt ]; then
-          echo "- ✅ **状态**: 执行成功" >> $GITHUB_STEP_SUMMARY
-          echo "- 📺 **频道分组**: ${{ steps.check_result.outputs.group_count }} 个" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔗 **总链接数**: ${{ steps.check_result.outputs.line_count }} 行" >> $GITHUB_STEP_SUMMARY
-          echo "- 💾 **文件大小**: ${{ steps.check_result.outputs.file_size }}" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ steps.check_changes.outputs.has_changes }}" == "true" ]; then
-            echo "- 🔄 **更新状态**: 已提交更新" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "- ℹ️ **更新状态**: 内容无变化，跳过提交" >> $GITHUB_STEP_SUMMARY
-          fi
-        else
-          echo "- ❌ **状态**: 执行失败" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### ⏰ 执行时间" >> $GITHUB_STEP_SUMMARY
-        echo "- 🕐 **UTC时间**: $(date -u '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
-        echo "- 🕐 **北京时间**: $(date -d '+8 hours' '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🔗 快速链接" >> $GITHUB_STEP_SUMMARY
-        echo "- 📁 [查看result.txt](./Parser/result.txt)" >> $GITHUB_STEP_SUMMARY
-        echo "- 📜 [查看执行历史](./commits)" >> $GITHUB_STEP_SUMMARY
-        echo "- ⚙️ [工作流设置](./.github/workflows/auto-update-channels.yml)" >> $GITHUB_STEP_SUMMARY
+        echo "✅ 更新已提交"
 
-# 环境变量
 env:
   PYTHONIOENCODING: utf-8
   PYTHONUNBUFFERED: 1
