@@ -22,7 +22,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
     def __init__(self, config: SearchConfig = None):
         super().__init__(config)
         self.site_name = "Tonkiang.us"
-        self.base_url = "https://tonkiang.us"
+        self.base_url = "http://tonkiang.us"
         self._setup_session()
         self._last_request_time = 0
         
@@ -184,16 +184,18 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 构建请求URL（支持直接IP访问）
             if self.target_host_ip:
-                # 直接IP访问模式
+                # 直接IP访问模式 - 强制使用HTTP避免SSL问题
                 ip = self.target_host_ip
                 # IPv6地址需要用方括号包围
                 if ':' in ip and not ip.startswith('['):
                     ip = f"[{ip}]"
-                base_url = f"https://{ip}"
+                base_url = f"http://{ip}"  # 使用HTTP而不是HTTPS
                 self.session.headers['Host'] = 'tonkiang.us'  # 设置Host头
-                logger.debug(f"[{self.site_name}] 使用直接IP访问: {ip}")
+                logger.debug(f"[{self.site_name}] 使用直接IP访问(HTTP): {ip}")
             else:
-                base_url = self.base_url
+                # 正常域名访问也改用HTTP
+                base_url = "http://tonkiang.us"
+                logger.debug(f"[{self.site_name}] 使用HTTP协议访问")
             
             # 访问主页
             try:
@@ -218,9 +220,10 @@ class TonkiangSearcher(BaseIPTVSearcher):
             search_data = {'seerch': keyword}
             
             # 更新请求头
+            origin_url = "http://tonkiang.us" if not self.target_host_ip else base_url
             self.session.headers.update({
-                'Referer': f'{base_url}/',
-                'Origin': base_url,
+                'Referer': f'{origin_url}/',
+                'Origin': origin_url,
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             
