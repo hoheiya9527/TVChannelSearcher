@@ -164,16 +164,21 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 构建请求URL（支持直接IP访问）
             if self.target_host_ip:
-                # 直接IP访问模式
+                # 直接IP访问模式 - 禁用SSL验证
                 ip = self.target_host_ip
                 # IPv6地址需要用方括号包围
                 if ':' in ip and not ip.startswith('['):
                     ip = f"[{ip}]"
                 base_url = f"https://{ip}"
                 self.session.headers['Host'] = 'tonkiang.us'  # 设置Host头
-                logger.debug(f"[{self.site_name}] 使用直接IP访问: {ip}")
+                self.session.verify = False  # 禁用SSL证书验证
+                # 禁用SSL警告
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                logger.debug(f"[{self.site_name}] 使用直接IP访问(禁用SSL验证): {ip}")
             else:
                 base_url = self.base_url
+                self.session.verify = True  # 正常模式启用SSL验证
             
             # 访问主页
             try:
