@@ -29,15 +29,17 @@ class TonkiangSearcher(BaseIPTVSearcher):
         # GitHub Actions 环境优化
         import os
         if os.getenv('GITHUB_ACTIONS'):
-            logger.info(f"[{self.site_name}] 检测到GitHub Actions环境，启用保守模式")
+            logger.info(f"[{self.site_name}] 检测到GitHub Actions环境，启用智能模式")
             self.github_actions_mode = True
-            # GitHub Actions 环境下使用更长的延迟
-            self.min_delay = float(os.getenv('SEARCH_DELAY', 15))  # 默认15秒间隔
-            self.retry_delay = float(os.getenv('RETRY_DELAY', 60))  # 默认60秒重试间隔
+            # GitHub Actions 环境下使用智能策略
+            self.min_delay = 8.0    # 适中的延迟
+            self.retry_delay = 30.0 # 适中的重试延迟
+            self.max_retries = 2    # 减少重试次数，快速失败
         else:
             self.github_actions_mode = False
             self.min_delay = 3.0
             self.retry_delay = 10.0
+            self.max_retries = 4
         
         # 用户代理池
         self.USER_AGENTS = [
@@ -127,9 +129,9 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 预热访问
             if self.github_actions_mode:
-                # GitHub Actions 环境下更长的预热延迟
-                self._random_delay(5.0, 10.0)
-                logger.debug(f"[{self.site_name}] GitHub Actions 预热访问主页...")
+                # GitHub Actions 环境下适中的预热延迟
+                self._random_delay(2.0, 4.0)
+                logger.debug(f"[{self.site_name}] 智能模式预热访问主页...")
             else:
                 self._random_delay(1.0, 3.0)
                 logger.debug(f"[{self.site_name}] 预热访问主页...")
@@ -149,9 +151,9 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 搜索请求
             if self.github_actions_mode:
-                # GitHub Actions 环境下更长的搜索延迟
-                self._random_delay(10.0, 20.0)
-                logger.debug(f"[{self.site_name}] GitHub Actions 发送搜索请求: {keyword}")
+                # GitHub Actions 环境下适中的搜索延迟
+                self._random_delay(5.0, 8.0)
+                logger.debug(f"[{self.site_name}] 智能模式发送搜索请求: {keyword}")
             else:
                 self._random_delay(2.0, 5.0)
                 logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
@@ -166,8 +168,8 @@ class TonkiangSearcher(BaseIPTVSearcher):
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             
-            # 尝试搜索，最多4次
-            for attempt in range(4):
+            # 尝试搜索，动态重试次数
+            for attempt in range(self.max_retries):
                 if attempt > 0:
                     logger.debug(f"[{self.site_name}] 第 {attempt} 次重试...")
                     if self.github_actions_mode:
@@ -197,6 +199,10 @@ class TonkiangSearcher(BaseIPTVSearcher):
                         return content
                     elif response.status_code == 200:
                         logger.warning(f"[{self.site_name}] 内容过短({len(content)}字符)")
+                        # GitHub Actions 模式下，连续失败则快速跳过
+                        if self.github_actions_mode and attempt >= 1:
+                            logger.info(f"[{self.site_name}] 智能模式：快速失败，跳过 {keyword}")
+                            break
                     elif response.status_code == 503:
                         logger.warning(f"[{self.site_name}] 服务不可用(503)")
                     else:

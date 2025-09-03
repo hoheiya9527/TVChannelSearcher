@@ -606,24 +606,23 @@ def main():
     
     # 根据环境创建配置
     if os.getenv('GITHUB_ACTIONS'):
-        print("🔧 检测到GitHub Actions环境，启用保守配置")
+        print("🔧 检测到GitHub Actions环境，启用智能配置")
         
         # 读取环境变量配置
-        max_workers = int(os.getenv('MAX_WORKERS', 1))
-        search_delay = int(os.getenv('SEARCH_DELAY', 20))
+        max_workers = int(os.getenv('MAX_WORKERS', 2))  # 适度并发
         
         print(f"   - 并发数: {max_workers}")
-        print(f"   - 搜索延迟: {search_delay}秒")
+        print(f"   - 策略: 智能重试 + 快速失败")
         
         config = ProcessorConfig(
             searcher_name="tonkiang",
-            max_results_per_channel=3,      # 进一步减少链接数
-            search_timeout=60,              # 增加搜索超时到60秒
+            max_results_per_channel=5,      # 适中的链接数
+            search_timeout=30,              # 适中的超时时间
             min_resolution=0,
             enable_validation=True,
             enable_cache=True,
-            concurrent_groups=1,            # 串行处理分组
-            max_workers_per_group=max_workers,  # 使用环境变量
+            concurrent_groups=2,            # 适度并发分组
+            max_workers_per_group=max_workers,
             min_valid_links=2               # 降低有效链接要求
         )
     else:
