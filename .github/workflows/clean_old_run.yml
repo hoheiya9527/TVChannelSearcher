@@ -15,8 +15,17 @@ jobs:
       - name: 清理 auto-update-channels 运行记录
         uses: Mattraks/delete-workflow-runs@v2
         with:
-          # 指定要清理的工作流文件（只删除运行记录，不删除工作流文件本身）
-          workflow_file_name: auto-update-channels.yml
+          # 使用工作流名称模式匹配
+          delete_workflow_pattern: "自动更新IPTV频道列表"
           # 保留最近的3次运行记录
           retain_days: 0
           keep_minimum_runs: 3
+      
+      - name: 清理自身运行记录
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          # 清理当前工作流的运行记录
+          delete_workflow_pattern: "清理自动更新频道运行记录"
+          # 只保留最近的1次运行记录
+          retain_days: 0
+          keep_minimum_runs: 1
