@@ -29,12 +29,15 @@ class TonkiangSearcher(BaseIPTVSearcher):
         # GitHub Actions 环境优化
         import os
         if os.getenv('GITHUB_ACTIONS'):
-            logger.info(f"[{self.site_name}] 检测到GitHub Actions环境，启用智能模式")
+            logger.info(f"[{self.site_name}] 检测到GitHub Actions环境，启用快速模式")
             self.github_actions_mode = True
-            # GitHub Actions 环境下使用智能策略
-            self.min_delay = 8.0    # 适中的延迟
-            self.retry_delay = 30.0 # 适中的重试延迟
-            self.max_retries = 2    # 减少重试次数，快速失败
+            # GitHub Actions 环境下使用快速策略
+            search_delay = float(os.getenv('SEARCH_DELAY', 3))
+            retry_delay = float(os.getenv('RETRY_DELAY', 10))
+            self.min_delay = search_delay
+            self.retry_delay = retry_delay
+            self.max_retries = 3    # 适中重试次数
+            logger.info(f"[{self.site_name}] 快速模式配置: 延迟={search_delay}s, 重试延迟={retry_delay}s")
         else:
             self.github_actions_mode = False
             self.min_delay = 3.0
@@ -109,9 +112,9 @@ class TonkiangSearcher(BaseIPTVSearcher):
     def _batch_delay(self):
         """批量处理延迟"""
         if self.github_actions_mode:
-            # GitHub Actions 环境使用更长延迟
-            delay = random.uniform(self.min_delay, self.min_delay + 10)
-            logger.debug(f"[{self.site_name}] GitHub Actions 批量延迟 {delay:.1f}秒")
+            # GitHub Actions 环境使用配置的延迟
+            delay = random.uniform(self.min_delay, self.min_delay + 3)
+            logger.debug(f"[{self.site_name}] 快速模式批量延迟 {delay:.1f}秒")
         else:
             delay = random.uniform(3.0, 8.0)
             logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒")
@@ -129,9 +132,9 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 预热访问
             if self.github_actions_mode:
-                # GitHub Actions 环境下适中的预热延迟
-                self._random_delay(2.0, 4.0)
-                logger.debug(f"[{self.site_name}] 智能模式预热访问主页...")
+                # GitHub Actions 环境下快速预热
+                self._random_delay(1.0, 2.0)
+                logger.debug(f"[{self.site_name}] 快速模式预热访问主页...")
             else:
                 self._random_delay(1.0, 3.0)
                 logger.debug(f"[{self.site_name}] 预热访问主页...")
@@ -151,9 +154,9 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 搜索请求
             if self.github_actions_mode:
-                # GitHub Actions 环境下适中的搜索延迟
-                self._random_delay(5.0, 8.0)
-                logger.debug(f"[{self.site_name}] 智能模式发送搜索请求: {keyword}")
+                # GitHub Actions 环境下快速搜索
+                self._random_delay(2.0, 3.0)
+                logger.debug(f"[{self.site_name}] 快速模式发送搜索请求: {keyword}")
             else:
                 self._random_delay(2.0, 5.0)
                 logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
