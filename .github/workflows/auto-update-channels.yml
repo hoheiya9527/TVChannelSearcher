@@ -22,6 +22,8 @@ jobs:
       with:
         fetch-depth: 0
     
+
+    
     - name: 设置Python环境
       uses: actions/setup-python@v4
       with:
@@ -72,18 +74,66 @@ jobs:
         curl -s https://httpbin.org/ip || echo "无法获取IP信息"
         echo ""
         
-        # 简单粗暴：直接尝试搜索，失败就失败
-        echo "🎯 直接搜索，不搞花里胡哨的东西"
-        export SEARCH_DELAY=5
-        export MAX_WORKERS=2
-        export RETRY_DELAY=15
+        # 方案：使用不同的GitHub Runner位置
+        echo "🌍 尝试使用不同地区的GitHub Runner"
         
-        # 给足时间让搜索完成
-        timeout 1800 python run_processor.py || {
-          echo "❌ 搜索失败，GitHub Actions环境被拉黑"
-          echo "💡 建议：使用本地环境或自托管Runner执行搜索"
+        # 显示当前Runner的详细信息
+        echo "📍 当前Runner信息:"
+        echo "   - IP: $(curl -s https://httpbin.org/ip 2>/dev/null | grep -o '"origin": "[^"]*"' | cut -d'"' -f4 || echo 'unknown')"
+        echo "   - 时区: $(date)"
+        echo "   - DNS: $(nslookup tonkiang.us 2>/dev/null | grep 'Address:' | tail -1 || echo 'DNS解析失败')"
+        
+        # 尝试通过不同的DNS解析
+        echo "🔄 尝试不同的DNS解析策略"
+        
+        # 方法1: 直接IP访问（绕过DNS）
+        echo "🎯 方法1: 尝试直接IP访问..."
+        TARGET_IP=$(nslookup tonkiang.us 8.8.8.8 2>/dev/null | grep 'Address:' | tail -1 | awk '{print $2}' || echo "")
+        
+        if [ -n "$TARGET_IP" ]; then
+          echo "   获取到IP: $TARGET_IP"
+          export TARGET_HOST_IP="$TARGET_IP"
+          export SEARCH_DELAY=2
+          export MAX_WORKERS=1
+          export RETRY_DELAY=15
+          
+          if timeout 900 python run_processor.py; then
+            echo "✅ 直接IP访问成功！"
+            exit 0
+          else
+            echo "❌ 直接IP访问失败"
+          fi
+        fi
+        
+        # 方法2: 使用不同的User-Agent策略
+        echo "🎯 方法2: 移动端User-Agent伪装..."
+        export MOBILE_MODE=true
+        export SEARCH_DELAY=8
+        export MAX_WORKERS=1
+        export RETRY_DELAY=25
+        
+        if timeout 900 python run_processor.py; then
+          echo "✅ 移动端伪装成功！"
+          exit 0
+        else
+          echo "❌ 移动端伪装失败"
+        fi
+        
+        # 方法3: 极限保守策略
+        echo "🎯 方法3: 极限保守策略（单线程+长延迟）..."
+        export SEARCH_DELAY=15
+        export MAX_WORKERS=1
+        export RETRY_DELAY=45
+        
+        if timeout 1200 python run_processor.py; then
+          echo "✅ 保守策略成功！"
+          exit 0
+        else
+          echo "❌ 所有方法均失败"
+          echo "💡 建议: GitHub Actions环境可能被永久拉黑"
+          echo "💡 解决方案: 考虑使用自托管Runner或本地定时任务"
           exit 1
-        }
+        fi
         
         echo "✅ 搜索阶段完成"
     

@@ -37,21 +37,41 @@ class TonkiangSearcher(BaseIPTVSearcher):
             self.min_delay = search_delay
             self.retry_delay = retry_delay
             self.max_retries = 3    # 适中重试次数
+            
+            # 特殊模式配置
+            self.target_host_ip = os.getenv('TARGET_HOST_IP')
+            self.mobile_mode = os.getenv('MOBILE_MODE') == 'true'
+            
+            if self.target_host_ip:
+                logger.info(f"[{self.site_name}] 直接IP访问模式: {self.target_host_ip}")
+            if self.mobile_mode:
+                logger.info(f"[{self.site_name}] 移动端伪装模式")
+            
             logger.info(f"[{self.site_name}] 快速模式配置: 延迟={search_delay}s, 重试延迟={retry_delay}s")
         else:
             self.github_actions_mode = False
             self.min_delay = 3.0
             self.retry_delay = 10.0
             self.max_retries = 4
+            self.target_host_ip = None
+            self.mobile_mode = False
         
         # 用户代理池
-        self.USER_AGENTS = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        ]
+        if self.mobile_mode:
+            self.USER_AGENTS = [
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+                'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+                'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+            ]
+        else:
+            self.USER_AGENTS = [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            ]
     
     def get_searcher_info(self) -> dict:
         """获取搜索器信息"""
@@ -142,9 +162,18 @@ class TonkiangSearcher(BaseIPTVSearcher):
             # 更新用户代理
             self.session.headers['User-Agent'] = self._get_random_user_agent()
             
+            # 构建请求URL（支持直接IP访问）
+            if self.target_host_ip:
+                # 直接IP访问模式
+                base_url = f"https://{self.target_host_ip}"
+                self.session.headers['Host'] = 'tonkiang.us'  # 设置Host头
+                logger.debug(f"[{self.site_name}] 使用直接IP访问: {self.target_host_ip}")
+            else:
+                base_url = self.base_url
+            
             # 访问主页
             try:
-                homepage_response = self.session.get(self.base_url, timeout=20)
+                homepage_response = self.session.get(base_url, timeout=20)
                 if homepage_response.status_code == 200:
                     logger.debug(f"[{self.site_name}] 主页访问成功")
                 else:
@@ -161,13 +190,13 @@ class TonkiangSearcher(BaseIPTVSearcher):
                 self._random_delay(2.0, 5.0)
                 logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
             
-            search_url = f"{self.base_url}/"
+            search_url = f"{base_url}/"
             search_data = {'seerch': keyword}
             
             # 更新请求头
             self.session.headers.update({
-                'Referer': f'{self.base_url}/',
-                'Origin': self.base_url,
+                'Referer': f'{base_url}/',
+                'Origin': base_url,
                 'Content-Type': 'application/x-www-form-urlencoded',
             })
             
