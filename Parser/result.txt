@@ -1,11 +1,8 @@
 央视频道,#genre#
-更新时间(2509031338),http://ak6668768.zicp.io:8801/live1002.m3u8
-CCTV-2,http://ak6668768.zicp.io:8801/live1002.m3u8
-CCTV-2,http://117.158.166.73:5003/cctv2.m3u8?token=7375646f431ee94a2837323967219992204b4c3f&z=1151
-CCTV-2,http://218.89.240.144:59901/tsfile/live/0002_1.m3u8
-CCTV-1,http://ak6668768.zicp.io:8800/live1001.m3u8
+更新时间(2509031352),http://aiony.top:35455/yhyx/IP-CCTV-12HD.m3u8
+CCTV-1,http://aiony.top:35455/yhyx/IP-CCTV-12HD.m3u8
+CCTV-1,http://ak6668768.zicp.io:8809/live1010.m3u8
 CCTV-1,http://ak6668768.zicp.io:8812/live1013.m3u8
-CCTV-1,http://221.0.78.26:881/hls/50201/index.m3u8
-CCTV-3,http://ak6668768.zicp.io:8802/live1003.m3u8
-CCTV-3,http://36.32.174.67:60080/newlive/live/hls/3/live.m3u8
-CCTV-3,http://hbhyjq.ufyct.com:1088/hls/11/index.m3u8
+CCTV-2,http://117.158.166.73:5003/cctv2.m3u8?token=7375646f431ee94a2837323967219992204b4c3f&z=1151
+CCTV-3,http://aiony.top:35455/bst/cctv3hdhai@4000000.m3u8
+CCTV-3,http://220.231.188.200:8088/hls/4/index.m3u8
