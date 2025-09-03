@@ -568,7 +568,8 @@ def main():
         enable_validation=True,             # 启用链接验证
         enable_cache=True,                  # 启用缓存
         concurrent_groups=2,                # 2个分组并发
-        max_workers_per_group=4             # 每分组4个并发
+        max_workers_per_group=4,            # 每分组4个并发
+        min_valid_links=3                   # 改为3个有效链接就够了（加快速度）
     )
     
     # 创建并运行处理器
