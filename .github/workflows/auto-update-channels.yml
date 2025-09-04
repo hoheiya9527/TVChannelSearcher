@@ -66,14 +66,37 @@ jobs:
       run: |
         [ -f result.txt ] && [ -s result.txt ] || exit 1
         
-        valid_channel_count=$(grep -v "^[^,]*,$" result.txt | wc -l 2>/dev/null || echo "0")
-        group_count=$(grep -c "^[^,]*,$" result.txt 2>/dev/null || echo "0")
+        # 修复数字格式问题，确保输出是纯数字
+        valid_channel_count=$(grep -v "^[^,]*,$" result.txt 2>/dev/null | wc -l | tr -d ' \n' || echo "0")
+        group_count=$(grep -c "^[^,]*,$" result.txt 2>/dev/null | tr -d ' \n' || echo "0")
         
+        # 确保变量是有效的数字
+        valid_channel_count=${valid_channel_count:-0}
+        group_count=${group_count:-0}
+        
+        # 调试输出
+        echo "检测到的频道数: '$valid_channel_count'"
+        echo "检测到的分组数: '$group_count'"
+        
+        # 数字验证：检查是否为纯数字
+        if ! [[ "$valid_channel_count" =~ ^[0-9]+$ ]]; then
+          echo "错误：频道计数不是有效数字: $valid_channel_count"
+          valid_channel_count=0
+        fi
+        
+        if ! [[ "$group_count" =~ ^[0-9]+$ ]]; then
+          echo "错误：分组计数不是有效数字: $group_count"
+          group_count=0
+        fi
+        
+        # 质量检查
         if [ "$valid_channel_count" -lt 10 ] || [ "$group_count" -lt 2 ]; then
+          echo "质量检查失败: 频道数=$valid_channel_count (需要≥10), 分组数=$group_count (需要≥2)"
           echo "QUALITY_CHECK=false" >> $GITHUB_ENV
           exit 0
         fi
         
+        echo "质量检查通过: 频道数=$valid_channel_count, 分组数=$group_count"
         echo "QUALITY_CHECK=true" >> $GITHUB_ENV
         echo "VALID_CHANNELS=$valid_channel_count" >> $GITHUB_ENV
         echo "GROUPS=$group_count" >> $GITHUB_ENV

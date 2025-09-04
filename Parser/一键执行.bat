@@ -63,12 +63,6 @@ if %errorlevel% equ 0 (
     if exist "result.txt" (
         echo 📁 结果文件已生成: result.txt
         for %%A in (result.txt) do echo 📊 文件大小: %%~zA 字节
-        echo 🔧 使用模块化架构，支持多站点扩展
-        echo.
-        echo 💡 扩展指南：
-        echo   - 查看 示例_新搜索器.py 学习如何添加新站点
-        echo   - 修改 ProcessorConfig 调整搜索参数
-        echo   - 支持动态切换不同的搜索器
     ) else (
         echo ⚠️  未找到结果文件
     )
