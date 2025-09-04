@@ -30,11 +30,11 @@ def print_banner():
 
 def check_python_version():
     """检查Python版本"""
-    print("🐍 检查Python环境...")
+    print("检查Python环境...")
     
     version = sys.version_info
     if version.major < 3 or (version.major == 3 and version.minor < 8):
-        print("❌ 错误：Python版本过低")
+        print("错误：Python版本过低")
         print("请安装Python 3.8或更高版本")
         print(f"当前版本: {sys.version}")
         return False

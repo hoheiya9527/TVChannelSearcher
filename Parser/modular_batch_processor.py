@@ -85,7 +85,6 @@ class ChannelFileParser:
             logger.error(f"解析文件失败: {e}")
             raise
         
-        logger.info(f"解析完成，共 {len(groups)} 个分组，{sum(len(g.channels) for g in groups)} 个频道")
         return groups
 
 
@@ -204,8 +203,8 @@ class ResultFormatter:
         # 获取第一个有效频道的链接，用于时间戳频道
         first_channel_url = self._get_first_valid_channel_url(all_results)
         
-        # 生成时间戳频道名称（yyMMddHHmm格式）
-        timestamp = datetime.now().strftime("%y%m%d%H%M")
+        # 生成时间戳频道名称（yyyy-MM-dd HH:mm格式）
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         timestamp_channel_name = f"更新时间({timestamp})"
         
         try:
@@ -230,7 +229,7 @@ class ResultFormatter:
                         if is_first_group and first_channel_url:
                             f.write(f"{timestamp_channel_name},{first_channel_url}\n")
                             total_links += 1
-                            logger.info(f"✨ 添加时间戳频道: {timestamp_channel_name}")
+                            logger.info(f"添加时间戳频道: {timestamp_channel_name}")
                             is_first_group = False
                         
                         # 按照输入文件中的频道顺序输出
@@ -261,7 +260,7 @@ class ResultFormatter:
                         if is_first_group and first_channel_url:
                             f.write(f"{timestamp_channel_name},{first_channel_url}\n")
                             total_links += 1
-                            logger.info(f"✨ 添加时间戳频道: {timestamp_channel_name}")
+                            logger.info(f"添加时间戳频道: {timestamp_channel_name}")
                             is_first_group = False
                         
                         for channel_name, channels in group_channels.items():
@@ -284,7 +283,7 @@ class ResultFormatter:
             logger.info(f"总计有效链接: {total_links} 个 (包含1个时间戳频道)")
             
             if self.domain_processor:
-                logger.info("✨ 链接已按域名/IP出现频率排序，频率高的排在前面")
+                logger.info("链接已按域名/IP出现频率排序，频率高的排在前面")
             
         except Exception as e:
             logger.error(f"写入结果文件失败: {e}")
@@ -364,7 +363,7 @@ class ModularBatchProcessor:
         self.searcher = self._create_searcher()
         
         logger.info(f"模块化批量处理器已初始化，使用搜索器: {self.searcher.site_name}")
-        logger.info("✨ 启用域名频率排序功能，高频域名/IP的链接将优先显示")
+        logger.info("启用域名频率排序功能，高频域名/IP的链接将优先显示")
     
     def _create_searcher(self) -> BaseIPTVSearcher:
         """创建搜索器实例"""
@@ -430,7 +429,7 @@ class ModularBatchProcessor:
     
     def process_group_concurrent(self, group: ChannelGroup) -> Dict[str, List[IPTVChannel]]:
         """
-        并发处理分组中的所有频道
+        处理分组中的所有频道 - 支持串行和并发模式
         
         Args:
             group: 频道分组
@@ -440,22 +439,47 @@ class ModularBatchProcessor:
         """
         group_channels = {}
         
-        with ThreadPoolExecutor(max_workers=self.config.max_workers_per_group) as executor:
-            # 提交所有搜索任务
-            future_to_channel = {
-                executor.submit(self.process_single_channel, channel_name): channel_name
-                for channel_name in group.channels
-            }
-            
-            # 收集结果
-            for future in as_completed(future_to_channel):
-                channel_name = future_to_channel[future]
+        # 检查是否强制串行模式（反爬虫需要）
+        force_serial = self.config.max_workers_per_group == 1
+        
+        if force_serial:
+            logger.info(f"  使用串行模式处理 {len(group.channels)} 个频道")
+            # 串行处理，完全避免并发
+            for i, channel_name in enumerate(group.channels, 1):
+                logger.info(f"  [{i}/{len(group.channels)}] 处理频道: {channel_name}")
                 try:
-                    channels = future.result()
+                    channels = self.process_single_channel(channel_name)
                     group_channels[channel_name] = channels
+                    
+                    # 频道间额外延迟（反爬虫）
+                    if i < len(group.channels):  # 不是最后一个频道
+                        import time
+                        import random
+                        delay = random.uniform(2.0, 5.0)
+                        logger.debug(f"  频道间延迟 {delay:.1f}秒")
+                        time.sleep(delay)
+                        
                 except Exception as e:
                     logger.error(f"    ✗ {channel_name}: 处理异常 - {e}")
                     group_channels[channel_name] = []
+        else:
+            # 原来的并发处理
+            with ThreadPoolExecutor(max_workers=self.config.max_workers_per_group) as executor:
+                # 提交所有搜索任务
+                future_to_channel = {
+                    executor.submit(self.process_single_channel, channel_name): channel_name
+                    for channel_name in group.channels
+                }
+                
+                # 收集结果
+                for future in as_completed(future_to_channel):
+                    channel_name = future_to_channel[future]
+                    try:
+                        channels = future.result()
+                        group_channels[channel_name] = channels
+                    except Exception as e:
+                        logger.error(f"    ✗ {channel_name}: 处理异常 - {e}")
+                        group_channels[channel_name] = []
         
         return group_channels
     
@@ -496,10 +520,10 @@ class ModularBatchProcessor:
         print("=" * 60)
         print("模块化IPTV频道批量搜索和链接提取工具")
         print(f"当前搜索器: {self.searcher.site_name}")
-        print(f"验证策略: 每频道找到{self.config.min_valid_links}个有效链接后停止 (智能验证)")
+        print(f"验证策略: 每频道找到{self.config.min_valid_links}个有效链接后停止 (极简模式)")
         print(f"搜索配置: 最大{self.config.max_results_per_channel}链接/频道, "
               f"分辨率≥{self.config.min_resolution}p, 验证{'开启' if self.config.enable_validation else '关闭'}")
-        print("✨ 智能特性: 域名频率排序 + 提前终止验证 + 并发处理")
+        print("智能特性: 跳过主页访问 + 直接搜索 + 完全串行")
         print("=" * 60)
         
         # 检查输入文件
@@ -571,15 +595,15 @@ class ModularBatchProcessor:
             logger.info(f"输出文件: {self.config.output_file}")
             logger.info("=" * 60)
             
-            print(f"\n✅ 模块化处理完成！")
-            print(f"⚡ 总用时: {processing_time:.2f} 秒")
-            print(f"📊 有效链接: {total_valid} 个")
-            print(f"📁 结果文件: {self.config.output_file}")
-            print(f"✨ 链接已按域名/IP频率智能排序")
+            print(f"\n模块化处理完成！")
+            print(f"总用时: {processing_time:.2f} 秒")
+            print(f"有效链接: {total_valid} 个")
+            print(f"结果文件: {self.config.output_file}")
+            print(f"链接已按域名/IP频率智能排序")
             
             # 显示结果文件的前几行
             if os.path.exists(self.config.output_file):
-                print(f"\n📖 结果文件前10行预览:")
+                print(f"\n结果文件前10行预览:")
                 with open(self.config.output_file, 'r', encoding='utf-8') as f:
                     lines = f.readlines()[:10]
                     for i, line in enumerate(lines, 1):
@@ -604,40 +628,19 @@ def main():
         print(f"  - {name}")
     print()
     
-    # 根据环境创建配置
-    if os.getenv('GITHUB_ACTIONS'):
-        print("🔧 检测到GitHub Actions环境，启用智能配置")
-        
-        # 读取环境变量配置
-        max_workers = int(os.getenv('MAX_WORKERS', 2))  # 适度并发
-        
-        print(f"   - 并发数: {max_workers}")
-        print(f"   - 策略: 智能重试 + 快速失败")
-        
-        config = ProcessorConfig(
-            searcher_name="tonkiang",
-            max_results_per_channel=5,      # 适中的链接数
-            search_timeout=30,              # 适中的超时时间
-            min_resolution=0,
-            enable_validation=True,
-            enable_cache=True,
-            concurrent_groups=2,            # 适度并发分组
-            max_workers_per_group=max_workers,
-            min_valid_links=2               # 降低有效链接要求
-        )
-    else:
-        print("🔧 本地环境，使用高效配置")
-        config = ProcessorConfig(
-            searcher_name="tonkiang",
-            max_results_per_channel=10,
-            search_timeout=10,
-            min_resolution=0,
-            enable_validation=True,
-            enable_cache=True,
-            concurrent_groups=3,
-            max_workers_per_group=8,
-            min_valid_links=3
-        )
+    # 使用正常并发配置 - 重新分析内容过短问题
+    print("配置: 使用正常并发配置（分析内容过短问题）")
+    config = ProcessorConfig(
+        searcher_name="tonkiang",
+        max_results_per_channel=8,     # 恢复正常请求数量
+        search_timeout=30,             # 正常超时
+        min_resolution=0,
+        enable_validation=True,        # 启用验证
+        enable_cache=True,
+        concurrent_groups=2,           # 2个并发组
+        max_workers_per_group=4,       # 每组3个工作线程
+        min_valid_links=3              # 正常要求
+    )
     
     # 创建并运行处理器
     processor = ModularBatchProcessor(config)

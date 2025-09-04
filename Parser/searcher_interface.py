@@ -160,8 +160,12 @@ class BaseIPTVSearcher(ABC):
             # 收集验证结果，达到目标数量后停止
             completed_count = 0
             start_time = time.time()
+            should_exit = False
             
             for future in as_completed(future_to_channel, timeout=12):  # 增加总超时到12秒
+                if should_exit:
+                    break  # 如果已标记退出，跳出循环
+                    
                 channel = future_to_channel[future]
                 completed_count += 1
                 
@@ -169,14 +173,11 @@ class BaseIPTVSearcher(ABC):
                     is_valid = future.result(timeout=8)  # 单个任务超时8秒，给质量验证足够时间
                     if is_valid:
                         valid_channels.append(channel)
-                        # 达到目标数量，立即强制关闭并返回
+                        logger.debug(f"[{self.site_name}] 验证通过: {channel.name} - {channel.url[:50]}...")
+                        
+                        # 检查是否达到目标数量
                         if len(valid_channels) >= target_count:
-                            logger.info(f"[{self.site_name}] 已找到 {len(valid_channels)} 个有效链接，提前结束验证")
-                            executor.shutdown(wait=False)  # 强制关闭，不等待
-                            result_count = len(valid_channels)
-                            status = "达标"
-                            logger.info(f"[{self.site_name}] 验证完成: {result_count} 个有效链接 [{status}]")
-                            return valid_channels
+                            should_exit = True  # 标记需要退出，但继续处理当前批次
                             
                 except Exception as e:
                     logger.debug(f"[{self.site_name}] 验证异常 {channel.url}: {e}")
@@ -189,20 +190,35 @@ class BaseIPTVSearcher(ABC):
                 # 超时保护 - 如果超过10秒还没完成，直接返回已找到的结果
                 if time.time() - start_time > 10:
                     logger.info(f"[{self.site_name}] 验证超时({time.time() - start_time:.1f}s)，返回已找到的 {len(valid_channels)} 个有效链接")
-                    executor.shutdown(wait=False)
-                    result_count = len(valid_channels)
-                    status = f"超时({result_count}/{target_count})"
-                    logger.info(f"[{self.site_name}] 验证完成: {result_count} 个有效链接 [{status}]")
-                    return valid_channels
+                    should_exit = True
+                    break
+                    
+                # 如果达到目标且当前批次处理完毕，退出
+                if should_exit and len(valid_channels) >= target_count:
+                    break
         
         except Exception as e:
             logger.warning(f"[{self.site_name}] 并发验证超时或异常: {e}")
             # 如果并发验证失败，返回已经验证的结果
         finally:
-            executor.shutdown(wait=False)  # 确保执行器被关闭
+            # 正确关闭executor，等待已提交的任务完成但不等太久
+            try:
+                executor.shutdown(wait=True)
+                # 等待最多2秒让正在执行的任务完成
+                import concurrent.futures
+                if not executor._threads:  # 如果没有线程，直接继续
+                    pass
+            except:
+                executor.shutdown(wait=False)
         
+        # 统一的结果日志
         result_count = len(valid_channels)
-        status = "达标" if result_count >= target_count else f"不足({result_count}/{target_count})"
+        if result_count >= target_count:
+            logger.info(f"[{self.site_name}] 已找到足够的有效链接，提前结束验证")
+            status = "达标"
+        else:
+            status = f"不足({result_count}/{target_count})"
+            
         logger.info(f"[{self.site_name}] 验证完成: {result_count} 个有效链接 [{status}]")
         
         return valid_channels

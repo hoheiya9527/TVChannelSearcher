@@ -26,51 +26,39 @@ class TonkiangSearcher(BaseIPTVSearcher):
         self._setup_session()
         self._last_request_time = 0
         
-        # GitHub Actions 环境优化
-        import os
-        if os.getenv('GITHUB_ACTIONS'):
-            logger.info(f"[{self.site_name}] 检测到GitHub Actions环境，启用快速模式")
-            self.github_actions_mode = True
-            # GitHub Actions 环境下使用快速策略
-            search_delay = float(os.getenv('SEARCH_DELAY', 3))
-            retry_delay = float(os.getenv('RETRY_DELAY', 10))
-            self.min_delay = search_delay
-            self.retry_delay = retry_delay
-            self.max_retries = 3    # 适中重试次数
-            
-            # 特殊模式配置
-            self.target_host_ip = os.getenv('TARGET_HOST_IP')
-            self.mobile_mode = os.getenv('MOBILE_MODE') == 'true'
-            
-            if self.target_host_ip:
-                logger.info(f"[{self.site_name}] 直接IP访问模式: {self.target_host_ip}")
-            if self.mobile_mode:
-                logger.info(f"[{self.site_name}] 移动端伪装模式")
-            
-            logger.info(f"[{self.site_name}] 快速模式配置: 延迟={search_delay}s, 重试延迟={retry_delay}s")
-        else:
-            self.github_actions_mode = False
-            self.min_delay = 3.0
-            self.retry_delay = 10.0
-            self.max_retries = 4
-            self.target_host_ip = None
-            self.mobile_mode = False
+        # 默认高效率配置
+        self.min_delay = 3.0
+        self.retry_delay = 10.0
+        self.max_retries = 3
+        self.target_host_ip = None
+        self.mobile_mode = False
         
-        # 用户代理池
+        # 会话轮换配置
+        self.session_rotation_enabled = True
+        self.requests_per_session = 3  # 每个会话最多请求次数
+        
+        # 更丰富的用户代理池 - 包含多种设备和版本
         if self.mobile_mode:
             self.USER_AGENTS = [
-                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-                'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-                'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-                'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 16_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+                'Mozilla/5.0 (iPad; CPU OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+                'Mozilla/5.0 (Linux; Android 14; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
+                'Mozilla/5.0 (Linux; Android 13; SM-A515F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+                'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36'
             ]
         else:
             self.USER_AGENTS = [
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36',
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/127.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/126.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36'
             ]
     
     def get_searcher_info(self) -> dict:
@@ -89,6 +77,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
         urllib3.disable_warnings()
         
         self.session = requests.Session()
+        self.current_session_requests = 0  # 当前会话请求计数
         
         # 完全禁用SSL证书验证
         self.session.verify = False
@@ -120,20 +109,34 @@ class TonkiangSearcher(BaseIPTVSearcher):
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
         
-        # 设置请求头
-        self.session.headers.update({
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        # 设置更完整的请求头，模拟真实浏览器，增加随机化
+        base_headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': random.choice(['no-cache', 'max-age=0']),
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-Site': random.choice(['none', 'cross-site']),
             'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0',
-        })
+        }
+        
+        # 随机添加一些可选请求头
+        if random.random() < 0.7:  # 70%概率添加Chrome特征头
+            chrome_version = random.choice(['127', '126', '125', '128'])
+            base_headers.update({
+                'sec-ch-ua': f'"Chromium";v="{chrome_version}", "Not(A:Brand";v="24", "Google Chrome";v="{chrome_version}"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': random.choice(['"Windows"', '"macOS"', '"Linux"']),
+            })
+        
+        if random.random() < 0.3:  # 30%概率添加Pragma
+            base_headers['Pragma'] = 'no-cache'
+            
+        self.session.headers.update(base_headers)
         
         # 减少urllib3的警告日志
         logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
@@ -144,42 +147,95 @@ class TonkiangSearcher(BaseIPTVSearcher):
         """获取随机用户代理"""
         return random.choice(self.USER_AGENTS)
     
+    def _create_fresh_session(self):
+        """创建全新的会话"""
+        logger.debug(f"[{self.site_name}] 创建新会话，重置反爬虫特征")
+        
+        # 关闭旧会话
+        if hasattr(self, 'session'):
+            self.session.close()
+        
+        # 重新设置会话
+        self._setup_session()
+        
+        # 重置计数器
+        self.current_session_requests = 0
+        
+        # 随机延迟以模拟新用户访问
+        self._random_delay(2.0, 5.0)
+    
+    def _simulate_human_behavior(self):
+        """模拟人类浏览行为"""
+        # 检查是否需要轮换会话
+        if (self.session_rotation_enabled and 
+            self.current_session_requests >= self.requests_per_session):
+            self._create_fresh_session()
+        
+        # 随机添加一些人类行为模拟
+        behavior_delay = random.uniform(0.5, 2.0)
+        time.sleep(behavior_delay)
+        
+        # 随机更新多种请求头
+        if random.random() < 0.4:  # 40%的概率更新Referer
+            referers = [
+                'https://www.google.com/search?q=iptv+live',
+                'https://www.google.com/search?q=tv+stream',
+                'https://www.google.com/search?q=live+tv',
+                'https://www.sogou.com/web?query=IPTV',
+                'https://tonkiang.us/',
+                'https://www.google.com/',
+                ''  # 有时不设置Referer
+            ]
+            referer = random.choice(referers)
+            if referer:
+                self.session.headers['Referer'] = referer
+            elif 'Referer' in self.session.headers:
+                del self.session.headers['Referer']
+        
+        # 随机更新其他请求头
+        if random.random() < 0.2:  # 20%的概率更新Accept-Language
+            languages = [
+                'en-US,en;q=0.9',
+                'en-US,en;q=0.9,de;q=0.8',
+                'en-GB,en-US;q=0.9,en;q=0.8',
+                'en-US,en;q=0.9,fr;q=0.8',
+            ]
+            self.session.headers['Accept-Language'] = random.choice(languages)
+        
+        # 随机设置屏幕分辨率相关头（某些网站会检查）
+        if random.random() < 0.1:  # 10%的概率
+            viewport_width = random.choice([1920, 1366, 1536, 1440, 1280])
+            self.session.headers['Viewport-Width'] = str(viewport_width)
+    
     def _random_delay(self, min_delay: float = 1.0, max_delay: float = 3.0):
         """随机延迟"""
         delay = random.uniform(min_delay, max_delay)
         time.sleep(delay)
     
     def _batch_delay(self):
-        """批量处理延迟"""
-        if self.github_actions_mode:
-            # GitHub Actions 环境使用配置的延迟
-            delay = random.uniform(self.min_delay, self.min_delay + 3)
-            logger.debug(f"[{self.site_name}] 快速模式批量延迟 {delay:.1f}秒")
-        else:
-            delay = random.uniform(3.0, 8.0)
-            logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒")
+        """批量处理延迟 - 增加延迟时间应对反爬虫"""
+        delay = random.uniform(8.0, 15.0)  # 增加延迟时间
+        logger.debug(f"[{self.site_name}] 批量处理延迟 {delay:.1f}秒")
         time.sleep(delay)
     
     def _send_search_request(self, keyword: str, page: int = 1) -> Optional[str]:
         """发送搜索请求"""
         try:
-            # 频率控制
+                # 频率控制 - 平衡的频率限制
             if hasattr(self, '_last_request_time'):
                 time_since_last = time.time() - self._last_request_time
-                min_interval = self.min_delay if self.github_actions_mode else 5.0
+                min_interval = 6.0  # 适中的间隔时间
                 if time_since_last < min_interval:
-                    self._batch_delay()
+                    remaining_time = min_interval - time_since_last
+                    logger.debug(f"[{self.site_name}] 频率控制等待 {remaining_time:.1f}秒")
+                    time.sleep(remaining_time + random.uniform(0.5, 1.5))  # 适中的随机延迟
             
-            # 预热访问
-            if self.github_actions_mode:
-                # GitHub Actions 环境下快速预热
-                self._random_delay(1.0, 2.0)
-                logger.debug(f"[{self.site_name}] 快速模式预热访问主页...")
-            else:
-                self._random_delay(1.0, 3.0)
-                logger.debug(f"[{self.site_name}] 预热访问主页...")
+            # 预热访问 - 适中延迟时间
+            self._random_delay(2.0, 4.0)
+            logger.debug(f"[{self.site_name}] 预热访问主页...")
             
-            # 更新用户代理
+            # 模拟人类行为
+            self._simulate_human_behavior()
             self.session.headers['User-Agent'] = self._get_random_user_agent()
             
             # 构建请求URL（支持直接IP访问）
@@ -195,85 +251,63 @@ class TonkiangSearcher(BaseIPTVSearcher):
             else:
                 base_url = self.base_url
             
-            # 访问主页
-            try:
-                homepage_response = self.session.get(base_url, timeout=20)
-                if homepage_response.status_code == 200:
-                    logger.debug(f"[{self.site_name}] 主页访问成功")
-                else:
-                    logger.warning(f"[{self.site_name}] 主页访问失败: {homepage_response.status_code}")
-            except Exception as e:
-                logger.warning(f"[{self.site_name}] 主页访问异常: {e}")
+            # **简化策略: 直接搜索，避免复杂逻辑导致的内容截断**
+            logger.debug(f"[{self.site_name}] 使用简化策略直接搜索: {keyword}")
             
-            # 搜索请求
-            if self.github_actions_mode:
-                # GitHub Actions 环境下快速搜索
-                self._random_delay(2.0, 3.0)
-                logger.debug(f"[{self.site_name}] 快速模式发送搜索请求: {keyword}")
-            else:
-                self._random_delay(2.0, 5.0)
-                logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
+            # 设置基础请求头（纯ASCII避免编码问题）
+            self.session.headers.clear()  # 清除所有可能有问题的头部
+            self.session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',  # 使用纯英文避免编码问题
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Origin': 'https://tonkiang.us',
+                'Referer': 'https://tonkiang.us/'
+            })
+            
+            # 简单延迟
+            self._random_delay(2.0, 4.0)
+            logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
             
             search_url = f"{base_url}/"
             search_data = {'seerch': keyword}
             
-            # 更新请求头
-            origin_url = "https://tonkiang.us" if not self.target_host_ip else base_url
-            self.session.headers.update({
-                'Referer': f'{origin_url}/',
-                'Origin': origin_url,
-                'Content-Type': 'application/x-www-form-urlencoded',
-            })
-            
-            # 尝试搜索，动态重试次数
-            for attempt in range(self.max_retries):
-                if attempt > 0:
-                    logger.debug(f"[{self.site_name}] 第 {attempt} 次重试...")
-                    if self.github_actions_mode:
-                        # GitHub Actions 环境使用更长的重试延迟
-                        retry_delay = self.retry_delay + attempt * 45  # 增加延迟倍数
-                        self._random_delay(retry_delay, retry_delay + 30)  # 增加随机范围
-                    else:
-                        self._random_delay(5.0 + attempt * 2, 10.0 + attempt * 3)
-                    self.session.headers['User-Agent'] = self._get_random_user_agent()
+            # 单次搜索请求，避免复杂重试逻辑
+            try:
+                response = self.session.post(
+                    search_url,
+                    data=search_data,
+                    timeout=30,
+                    verify=False
+                )
                 
-                try:
-                    response = self.session.post(
-                        search_url,
-                        data=search_data,
-                        timeout=30,
-                        allow_redirects=True
-                    )
+                if response.encoding is None:
+                    response.encoding = 'utf-8'
+                content = response.text
+                
+                # 简化的响应检查（仿照调试脚本）
+                logger.info(f"[{self.site_name}] 状态码: {response.status_code}, 内容长度: {len(content)} 字符")
+                
+                if response.status_code == 200:
+                    # 基础质量检查
+                    has_tba = 'tba>' in content
+                    has_keyword = any(kw in content for kw in [keyword, 'CCTV', 'channel', 'live'])
                     
-                    if response.encoding is None:
-                        response.encoding = 'utf-8'
-                    content = response.text
-                    
-                    # 检查响应质量
-                    if response.status_code == 200 and len(content) >= 10000:
-                        logger.info(f"[{self.site_name}] 搜索请求成功: {keyword}")
+                    if has_tba and has_keyword:
+                        logger.info(f"[{self.site_name}] 搜索成功: {keyword}")
                         self._last_request_time = time.time()
                         return content
-                    elif response.status_code == 200:
-                        logger.warning(f"[{self.site_name}] 内容过短({len(content)}字符)")
-                        # GitHub Actions 模式下，给更多重试机会
-                        if self.github_actions_mode and attempt >= 2:  # 改为2次失败后才跳过
-                            logger.info(f"[{self.site_name}] 智能模式：多次失败，跳过 {keyword}")
-                            break
-                    elif response.status_code == 503:
-                        logger.warning(f"[{self.site_name}] 服务不可用(503)")
                     else:
-                        logger.warning(f"[{self.site_name}] 状态码: {response.status_code}")
-                        if response.status_code not in [503, 200]:
-                            break
-                            
-                except Exception as e:
-                    logger.warning(f"[{self.site_name}] 请求异常: {e}")
-                    if attempt == 3:
-                        break
-            
-            logger.error(f"[{self.site_name}] 所有尝试均失败")
-            self._last_request_time = time.time()
+                        logger.warning(f"[{self.site_name}] 内容质量检查失败: tba={has_tba}, keyword={has_keyword}")
+                        # 调试信息
+                        preview = content[:300] + "..." if len(content) > 300 else content
+                        logger.debug(f"[{self.site_name}] 内容预览: {repr(preview)}")
+                else:
+                    logger.warning(f"[{self.site_name}] HTTP错误: {response.status_code}")
+                
+            except requests.exceptions.RequestException as e:
+                logger.error(f"[{self.site_name}] 请求异常: {e}")
+                
             return None
             
         except Exception as e:
@@ -393,7 +427,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
                         continue
                     if any(x in text.lower() for x in ['http', '.m3u8', '.ts', 'onclick', 'copy', 'play']):
                         continue
-                    if any(pattern in text.lower() for pattern in ['cctv', '卫视', 'tv', '频道']):
+                    if any(pattern in text.lower() for pattern in ['cctv', 'tv', 'channel', 'live']):
                         potential_names.append(text)
                 
                 if potential_names:
@@ -565,7 +599,7 @@ if __name__ == "__main__":
     print()
     
     # 测试搜索
-    test_keyword = "CCTV-1"
+    test_keyword = "CCTV1"
     print(f"测试搜索: {test_keyword}")
     
     channels = searcher.search_channels(test_keyword)
@@ -575,6 +609,9 @@ if __name__ == "__main__":
         print(f"  {i}. {channel.name} - {channel.resolution} - {channel.url}")
     
     # 显示缓存状态
-    cache_info = searcher.get_cache_info()
-    print(f"\n缓存状态: {cache_info['cached_keywords']} 个关键词已缓存")
+    if hasattr(searcher, '_search_cache') and searcher._search_cache:
+        cached_count = len(searcher._search_cache)
+        print(f"\n缓存状态: {cached_count} 个关键词已缓存")
+    else:
+        print(f"\n缓存状态: 缓存未启用或为空")
     print("=" * 50)
