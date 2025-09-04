@@ -259,7 +259,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
             self.session.headers.update({
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',  # 使用纯英文避免编码问题
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',  
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Origin': 'https://tonkiang.us',
                 'Referer': 'https://tonkiang.us/'
@@ -285,7 +285,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
                     response.encoding = 'utf-8'
                 content = response.text
                 
-                # 简化的响应检查（仿照调试脚本）
+                # 简化的响应检查
                 logger.info(f"[{self.site_name}] 状态码: {response.status_code}, 内容长度: {len(content)} 字符")
                 
                 if response.status_code == 200:
@@ -338,7 +338,11 @@ class TonkiangSearcher(BaseIPTVSearcher):
                     
                     # 查找频道名称
                     channel_name = self._find_channel_name_near_tba(tba, keyword)
-                    if not channel_name:
+                    
+                    # 如果是中文关键词且没找到频道名，使用搜索关键词作为频道名
+                    if not channel_name and any(ord(char) > 127 for char in keyword):
+                        channel_name = keyword
+                    elif not channel_name:
                         continue
                     
                     # 验证名称匹配

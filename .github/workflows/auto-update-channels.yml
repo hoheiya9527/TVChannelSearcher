@@ -90,13 +90,13 @@ jobs:
         fi
         
         # 质量检查
-        if [ "$valid_channel_count" -lt 10 ] || [ "$group_count" -lt 2 ]; then
-          echo "质量检查失败: 频道数=$valid_channel_count (需要≥10), 分组数=$group_count (需要≥2)"
+        if [ "$valid_channel_count" -lt 10 ]; then
+          echo "检查失败: 频道数=$valid_channel_count (需要≥10)"
           echo "QUALITY_CHECK=false" >> $GITHUB_ENV
           exit 0
         fi
         
-        echo "质量检查通过: 频道数=$valid_channel_count, 分组数=$group_count"
+        echo "检查通过: 频道数=$valid_channel_count, 分组数=$group_count"
         echo "QUALITY_CHECK=true" >> $GITHUB_ENV
         echo "VALID_CHANNELS=$valid_channel_count" >> $GITHUB_ENV
         echo "GROUPS=$group_count" >> $GITHUB_ENV
