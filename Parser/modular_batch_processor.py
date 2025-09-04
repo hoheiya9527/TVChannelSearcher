@@ -9,7 +9,7 @@ import os
 import time
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -203,8 +203,9 @@ class ResultFormatter:
         # 获取第一个有效频道的链接，用于时间戳频道
         first_channel_url = self._get_first_valid_channel_url(all_results)
         
-        # 生成时间戳频道名称（yyyy-MM-dd HH:mm格式）
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        # 生成时间戳频道名称（yyyy-MM-dd HH:mm格式，北京时间）
+        beijing_tz = timezone(timedelta(hours=8))  # 北京时间 UTC+8
+        timestamp = datetime.now(beijing_tz).strftime("%Y-%m-%d %H:%M")
         timestamp_channel_name = f"更新时间({timestamp})"
         
         try:
