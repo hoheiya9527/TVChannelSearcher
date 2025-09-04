@@ -120,7 +120,7 @@ jobs:
     - name: 提交更新
       if: env.QUALITY_CHECK == 'true' && env.HAS_CHANGES == 'true'
       run: |
-        git add Parser/result.txt
+        git add result.txt
         git commit -m "🔄 自动更新IPTV频道列表 - ${{ env.VALID_CHANNELS }}个频道，${{ env.GROUPS }}个分组"
         git push
     
