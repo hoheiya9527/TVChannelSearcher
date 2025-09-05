@@ -17,7 +17,7 @@ from searcher_interface import BaseIPTVSearcher, IPTVChannel, SearchConfig, Sear
 logger = logging.getLogger(__name__)
 
 class TonkiangSearcher(BaseIPTVSearcher):
-    """Tonkiang.us IPTV搜索器 - 重写版本"""
+    """Tonkiang.us IPTV搜索器"""
     
     def __init__(self, config: SearchConfig = None):
         super().__init__(config)
@@ -25,6 +25,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
         self.base_url = "https://tonkiang.us"
         self._setup_session()
         self._last_request_time = 0
+        self._current_l_param = None  # 存储当前搜索的l参数，用于分页
         
         # 默认高效率配置
         self.min_delay = 3.0
@@ -142,6 +143,29 @@ class TonkiangSearcher(BaseIPTVSearcher):
         logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
         
         logger.info(f"[{self.site_name}] HTTP会话已配置")
+    
+    def _extract_l_parameter(self, html_content: str) -> Optional[str]:
+        """从HTML内容中提取l参数 - 用于分页请求"""
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # 从分页按钮链接中提取l参数
+            for link in soup.find_all('a', href=True):
+                href = link.get('href', '')
+                if 'page=2' in href and 'l=' in href:
+                    # 提取8-12位的hex字符串
+                    match = re.search(r'l=([a-f0-9]{8,12})', href, re.IGNORECASE)
+                    if match:
+                        l_param = match.group(1)
+                        logger.debug(f"[{self.site_name}] 提取到l参数: {l_param}")
+                        return l_param
+            
+            logger.debug(f"[{self.site_name}] 未找到l参数")
+            return None
+            
+        except Exception as e:
+            logger.debug(f"[{self.site_name}] 提取l参数异常: {e}")
+            return None
     
     def _get_random_user_agent(self) -> str:
         """获取随机用户代理"""
@@ -267,19 +291,44 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
             # 简单延迟
             self._random_delay(2.0, 4.0)
-            logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}")
+            logger.debug(f"[{self.site_name}] 发送搜索请求: {keyword}, 页面: {page}")
             
-            search_url = f"{base_url}/"
-            search_data = {'seerch': keyword}
-            
-            # 单次搜索请求，避免复杂重试逻辑
+            # 分页逻辑：第一页用POST，后续页面用GET
             try:
-                response = self.session.post(
-                    search_url,
-                    data=search_data,
-                    timeout=30,
-                    verify=False
-                )
+                if page == 1:
+                    # 第一页：POST请求
+                    search_url = f"{base_url}/"
+                    search_data = {'seerch': keyword}
+                    response = self.session.post(
+                        search_url,
+                        data=search_data,
+                        timeout=30,
+                        verify=False
+                    )
+                else:
+                    # 第二页及后续：GET请求，需要l参数
+                    if not self._current_l_param:
+                        logger.warning(f"[{self.site_name}] 第{page}页请求缺少l参数")
+                        return None
+                    
+                    search_url = f"{base_url}/?page={page}&iptv={keyword}&l={self._current_l_param}"
+                    logger.debug(f"[{self.site_name}] 第{page}页GET请求URL: {search_url}")
+                    
+                    # 设置第二页专用的请求头
+                    headers = {
+                        'Referer': f"{base_url}/?iptv={keyword}",
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'same-origin',
+                        'Sec-Fetch-User': '?1',
+                    }
+                    
+                    response = self.session.get(
+                        search_url,
+                        headers=headers,
+                        timeout=30,
+                        verify=False
+                    )
                 
                 if response.encoding is None:
                     response.encoding = 'utf-8'
@@ -294,7 +343,15 @@ class TonkiangSearcher(BaseIPTVSearcher):
                     has_keyword = any(kw in content for kw in [keyword, 'CCTV', 'channel', 'live'])
                     
                     if has_tba and has_keyword:
-                        logger.info(f"[{self.site_name}] 搜索成功: {keyword}")
+                        # 如果是第一页，提取l参数用于后续分页
+                        if page == 1:
+                            self._current_l_param = self._extract_l_parameter(content)
+                            if self._current_l_param:
+                                logger.debug(f"[{self.site_name}] 第一页成功提取l参数: {self._current_l_param}")
+                            else:
+                                logger.debug(f"[{self.site_name}] 第一页未能提取l参数")
+                        
+                        logger.info(f"[{self.site_name}] 搜索成功: {keyword}, 页面: {page}")
                         self._last_request_time = time.time()
                         return content
                     else:
@@ -569,6 +626,18 @@ class TonkiangSearcher(BaseIPTVSearcher):
             
         except Exception:
             return False
+    
+    def search_channels(self, keyword: str) -> List[IPTVChannel]:
+        """
+        搜索频道 - 覆盖基类方法以支持分页修复
+        每次新搜索时重置l参数，确保分页正常工作
+        """
+        # 重置l参数，为新的搜索做准备
+        self._current_l_param = None
+        logger.debug(f"[{self.site_name}] 开始新搜索，重置l参数: {keyword}")
+        
+        # 调用基类的search_channels方法
+        return super().search_channels(keyword)
 
 
 # 注册搜索器

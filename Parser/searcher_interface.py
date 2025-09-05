@@ -54,9 +54,9 @@ class SearchConfig:
     min_resolution: int = 0        # 最小分辨率要求
     enable_validation: bool = True  # 是否启用链接验证
     enable_cache: bool = True      # 是否启用缓存
-    max_pages: int = 2            # 最大搜索页数 - 限制为2页
+    max_pages: int = 2            # 最大搜索页数 - 限制为2页，第3页数据过旧
     concurrent_workers: int = 16   # 并发线程数 - 从6增加到16
-    min_valid_links: int = 3       # 每个频道最少有效链接数 - 从5减少到3
+    min_valid_links: int = 5       # 每个频道最少有效链接数 
 
 
 class BaseIPTVSearcher(ABC):
@@ -162,7 +162,7 @@ class BaseIPTVSearcher(ABC):
             start_time = time.time()
             should_exit = False
             
-            for future in as_completed(future_to_channel, timeout=12):  # 增加总超时到12秒
+            for future in as_completed(future_to_channel, timeout=18):  # 增加总超时到18秒
                 if should_exit:
                     break  # 如果已标记退出，跳出循环
                     
@@ -187,8 +187,8 @@ class BaseIPTVSearcher(ABC):
                     elapsed = time.time() - start_time
                     logger.info(f"[{self.site_name}] 验证进度: {len(valid_channels)}个有效/{completed_count}个已验证 ({elapsed:.1f}s)")
                 
-                # 超时保护 - 如果超过10秒还没完成，直接返回已找到的结果
-                if time.time() - start_time > 10:
+                # 超时保护 - 如果超过15秒还没完成，直接返回已找到的结果
+                if time.time() - start_time > 15:
                     logger.info(f"[{self.site_name}] 验证超时({time.time() - start_time:.1f}s)，返回已找到的 {len(valid_channels)} 个有效链接")
                     should_exit = True
                     break
@@ -236,15 +236,20 @@ class BaseIPTVSearcher(ABC):
         # 检查缓存
         if self._search_cache and keyword in self._search_cache:
             logger.info(f"[{self.site_name}] 使用缓存结果: {keyword}")
-            return self._search_cache[keyword][:self.config.max_results]
+            # 使用与搜索逻辑一致的目标计数
+            target_count = self.config.min_valid_links if self.config.enable_validation else self.config.max_results
+            return self._search_cache[keyword][:target_count]
         
         logger.info(f"[{self.site_name}] 开始搜索: {keyword}")
         
         all_channels = []
         page = 1
         
-        # 分页搜索
-        while len(all_channels) < self.config.max_results and page <= self.config.max_pages:
+        # 分页搜索 - 优先考虑min_valid_links停止条件，但考虑去重后可能减少的情况
+        target_count = self.config.min_valid_links if self.config.enable_validation else self.config.max_results
+        # 为了确保去重后还能有足够链接，搜索更多链接
+        search_target = min(target_count * 2, self.config.max_results)
+        while len(all_channels) < search_target and page <= self.config.max_pages:
             try:
                 logger.info(f"[{self.site_name}] 搜索第 {page} 页...")
                 
@@ -264,11 +269,23 @@ class BaseIPTVSearcher(ABC):
                     remaining_needed = max(0, self.config.min_valid_links - len(all_channels))
                     
                     if remaining_needed > 0:
-                        valid_channels = self._validate_links_concurrent(page_channels, remaining_needed)
-                        logger.info(f"[{self.site_name}] 第 {page} 页: {len(page_channels)} 个链接，{len(valid_channels)} 个有效")
-                        all_channels.extend(valid_channels)
+                        # 先过滤掉已经验证过的重复链接
+                        existing_urls = {ch.url for ch in all_channels}
+                        new_channels = [ch for ch in page_channels if ch.url not in existing_urls]
                         
-                        # 如果已达到最少有效链接数要求，提前结束搜索
+                        if new_channels:
+                            logger.info(f"[{self.site_name}] 第 {page} 页: {len(page_channels)} 个链接，过滤重复后 {len(new_channels)} 个待验证")
+                            valid_channels = self._validate_links_concurrent(new_channels, remaining_needed)
+                            logger.info(f"[{self.site_name}] 第 {page} 页验证结果: {len(valid_channels)} 个有效")
+                            
+                            # 输出发现的有效链接详情
+                            for i, channel in enumerate(valid_channels, 1):
+                                logger.info(f"[{self.site_name}]   {i}. {channel.name} - {channel.url}")
+                            all_channels.extend(valid_channels)
+                        else:
+                            logger.info(f"[{self.site_name}] 第 {page} 页: {len(page_channels)} 个链接，全部为重复链接，跳过验证")
+                        
+                        # 检查是否已达到目标链接数（由于验证时已去重，这里直接检查数量）
                         if len(all_channels) >= self.config.min_valid_links:
                             logger.info(f"[{self.site_name}] 已达到目标链接数({len(all_channels)}/{self.config.min_valid_links})，停止搜索")
                             break
@@ -288,13 +305,19 @@ class BaseIPTVSearcher(ABC):
         # 去重
         unique_channels = []
         seen_urls = set()
+        duplicate_count = 0
         for channel in all_channels:
             if channel.url not in seen_urls:
                 seen_urls.add(channel.url)
                 unique_channels.append(channel)
+            else:
+                duplicate_count += 1
+                logger.info(f"[{self.site_name}]   重复链接已跳过: {channel.name} - {channel.url}")
         
-        # 限制数量
-        final_channels = unique_channels[:self.config.max_results]
+
+        # 限制数量 - 使用与搜索逻辑一致的目标计数
+        target_count = self.config.min_valid_links if self.config.enable_validation else self.config.max_results
+        final_channels = unique_channels[:target_count]
         
         # 检查搜索结果
         if len(final_channels) == 0:

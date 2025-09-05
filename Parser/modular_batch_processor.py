@@ -633,14 +633,14 @@ def main():
     print("配置: 使用正常并发配置（分析内容过短问题）")
     config = ProcessorConfig(
         searcher_name="tonkiang",
-        max_results_per_channel=8,     # 恢复正常请求数量
+        max_results_per_channel=8,     # 请求数量
         search_timeout=30,             # 正常超时
         min_resolution=0,
         enable_validation=True,        # 启用验证
         enable_cache=True,
         concurrent_groups=2,           # 2个并发组
-        max_workers_per_group=4,       # 每组3个工作线程
-        min_valid_links=3              # 正常要求
+        max_workers_per_group=4,       # 每组工作线程数量
+        min_valid_links=5              # 期望的发现链接数量
     )
     
     # 创建并运行处理器
