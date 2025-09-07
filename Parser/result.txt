@@ -1,16 +1,15 @@
 央视频道,#genre#
-更新时间(2025-09-07 06:31),http://api.kkitv.itv888.cn:8080/hls/25uo2rutach/index.m3u8
+更新时间(2025-09-07 16:32),https://turkmedya-live.ercdn.net/tv4/tv4_720p.m3u8
 CCTV1,http://api.kkitv.itv888.cn:8080/hls/f5fuln3kthe/index.m3u8
-CCTV1,http://171.116.147.32:9003/hls/1/index.m3u8
 CCTV1,http://118.81.76.194:9003/hls/1/index.m3u8
+CCTV1,http://171.116.147.32:9003/hls/1/index.m3u8
+CCTV1,http://171.116.254.224:9003/hls/1/index.m3u8
 CCTV2,http://api.kkitv.itv888.cn:8080/hls/4nlkhc68gfu/index.m3u8
-CCTV2,http://sh.lnott.top:880/dx02.m3u8
 CCTV2,http://111.43.126.240:9003/hls/14/index.m3u8
 CCTV2-财经,http://42.225.117.174:11199/tsfile/live/0002_1.m3u8
 CCTV3,http://api.kkitv.itv888.cn:8080/hls/aikp69mli0d/index.m3u8
 CCTV3,http://sh.lnott.top:880/dx03.m3u8
 CCTV3,http://111.43.126.240:9003/hls/15/index.m3u8
-CCTV3,http://58.19.180.108:9981/stream/channelid/188040143?profile=pass
 CCTV4,http://api.kkitv.itv888.cn:8080/hls/25uo2rutach/index.m3u8
 CCTV4,http://111.43.126.240:9003/hls/16/index.m3u8
 CCTV4,http://110.177.144.22:9003/hls/4/index.m3u8
@@ -25,18 +24,11 @@ CCTV5+,http://api.kkitv.itv888.cn:8080/hls/xsb4znrv3c/index.m3u8
 CCTV5+,http://sh.lnott.top:880/dx16.m3u8
 CCTV5+,http://111.43.126.240:9003/hls/18/index.m3u8
 CCTV5+,http://58.19.180.108:9981/stream/channelid/1400754434?profile=pass
-CCTV6,http://api.kkitv.itv888.cn:8080/hls/tp9ajk4od5/index.m3u8
-CCTV6,http://sh.lnott.top:880/dx06.m3u8
-CCTV6,http://111.43.126.240:9003/hls/19/index.m3u8
-CCTV6,http://171.116.147.32:9003/hls/7/index.m3u8
-CCTV6-电影,http://61.156.228.12:8154/tsfile/live/0006_1.m3u8?key=txiptv
-CCTV7,http://api.kkitv.itv888.cn:8080/hls/3udggaszi1i/index.m3u8
-CCTV7,http://sh.lnott.top:880/dx07.m3u8
-CCTV7,http://111.43.126.240:9003/hls/20/index.m3u8
-CCTV7,http://58.19.180.108:9981/stream/channelid/499001205?profile=pass
+CCTV5 体育赛事,http://123.129.70.178:9901/tsfile/live/0016_1.m3u8
 CCTV8,http://api.kkitv.itv888.cn:8080/hls/vseo1nm7qp/index.m3u8
 CCTV8,http://sh.lnott.top:880/dx08.m3u8
 CCTV8,http://111.43.126.240:9003/hls/21/index.m3u8
+CCTV8,http://58.19.180.108:9981/stream/channelid/1123874386?profile=pass
 CCTV9,http://api.kkitv.itv888.cn:8080/hls/bsmkmf3jrp4/index.m3u8
 CCTV9,http://sh.lnott.top:880/dx09.m3u8
 CCTV9,http://111.43.126.240:9003/hls/22/index.m3u8
@@ -70,6 +62,7 @@ CCTV16,http://183.184.62.41:9003/hls/17/index.m3u8
 CCTV17,http://api.kkitv.itv888.cn:8080/hls/5t4bgijh9da/index.m3u8
 CCTV17,http://sh.lnott.top:880/dx17.m3u8
 CCTV17,http://111.43.126.240:9003/hls/30/index.m3u8
+CCTV17,http://171.120.248.134:9003/hls/18/index.m3u8
 cctv4k超高清,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d862909db2279d3b3387cd9c.m3u8
 卫视频道,#genre#
 北京卫视,http://api.kkitv.itv888.cn:8080/hls/h5uud1z84gn/index.m3u8
@@ -166,19 +159,19 @@ cctv4k超高清,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d8
 海南卫视,http://sh.lnott.top:880/dx58.m3u8
 海南卫视,http://ak6668768.zicp.io:8847/live1072.m3u8
 港澳频道,#genre#
-凤凰中文,http://58.19.180.108:9981/stream/channelid/1749482778?profile=pass
+凤凰中文,https://live.tvfix.org/live/fhzw/1/v4000000/index.m3u8
+凤凰中文,https://live.tvfix.org/live/fhzw/index.m3u8
 凤凰中文,https://stream1.freetv.fun/909e580b3dd181e5fa28b63945b4bfedd0ad26b48285ce4c581d92094cc37d15.m3u8
 凤凰中文,https://stream1.freetv.fun/fd3f587c16496807d24b3f3c58eff10439384428069068b6b822777315cbc5b6.m3u8
 凤凰中文,http://203.205.191.53/qctv.fengshows.cn/live/0701pcc72.m3u8
-凤凰中文,https://live.tvfix.org/live/fhzw/1/v4000000/index.m3u8
-凤凰资讯,https://stream1.freetv.fun/03b8b50959f71c9480228564b4fedbe3cd0927a427d0bc903059a5843cb7c4b6.m3u8
-凤凰资讯,https://k44991.kylintv.tv/live/pxinhd_iphone.m3u8
-凤凰资讯,http://203.205.191.53/qctv.fengshows.cn/live/0701pin72.m3u8
+凤凰资讯,https://live.tvfix.org/live/fwzx/index.m3u8
 凤凰资讯,http://203.205.191.53/qctv.fengshows.cn/live/0701pin72.flv
+凤凰资讯,http://203.205.191.53/qctv.fengshows.cn/live/0701pin72.m3u8
+凤凰资讯,http://php.jdshipin.com:8880/TVOD/iptv.php?id=fhzx
 凤凰资讯,http://61.221.215.25:8800/hls/47/index.m3u8
-TVB翡翠台,http://php.jdshipin.com:8880/TVOD/iptv.php?id=fct
-TVB翡翠台,http://php.jdshipin.com:8880/smt.php?id=jade_twn
+TVB翡翠台,https://live.tvfix.org/live/jade/index.m3u8
 TVB翡翠台,http://php.jdshipin.com:8880/TVOD/iptv.php?id=fct3
+TVB翡翠台,http://php.jdshipin.com:8880/TVOD/iptv.php?id=fct2
 tvb翡翠台,https://epg.pw/stream/fe02817d95c6d58f41e1ea8208b5a8c9462bf525b153819b0c3918406127925a.m3u8
 CHC动作电影,http://sh.lnott.top:880/dx100.m3u8
 CHC动作电影,http://58.19.180.108:9981/stream/channelid/1782708396?profile=pass
