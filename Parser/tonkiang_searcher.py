@@ -412,13 +412,13 @@ class TonkiangSearcher(BaseIPTVSearcher):
                     
                     # 创建频道对象
                     channel = IPTVChannel(
-                        name=channel_name,
+                        name=keyword,
                         url=stream_url,
                         resolution=resolution,
                         source=self.site_name
                     )
                     channels.append(channel)
-                    logger.debug(f"[{self.site_name}] 添加频道: {channel_name} [{resolution}]")
+                    logger.debug(f"[{self.site_name}] 添加频道: {keyword} [{resolution}]")
                     
                 except Exception as e:
                     logger.debug(f"[{self.site_name}] 解析单个tba异常: {e}")
