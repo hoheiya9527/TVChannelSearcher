@@ -1,5 +1,5 @@
 央视频道,#genre#
-更新时间(2025-09-11 06:32),http://api.kkitv.itv888.cn:8080/hls/f5fuln3kthe/index.m3u8
+更新时间(2025-09-11 16:34),http://api.kkitv.itv888.cn:8080/hls/f5fuln3kthe/index.m3u8
 CCTV1,http://api.kkitv.itv888.cn:8080/hls/f5fuln3kthe/index.m3u8
 CCTV1,http://171.116.147.32:9003/hls/1/index.m3u8
 CCTV1,http://171.116.254.224:9003/hls/1/index.m3u8
@@ -7,6 +7,7 @@ CCTV1,http://36.135.118.195:85/tsfile/live/0001_1.m3u8?key=txiptv
 CCTV2,http://api.kkitv.itv888.cn:8080/hls/4nlkhc68gfu/index.m3u8
 CCTV2,http://sh.lnott.top:880/dx02.m3u8
 CCTV2,http://111.43.126.240:9003/hls/14/index.m3u8
+CCTV2,http://123.113.96.47:85/tsfile/live/0002_1.m3u8?key=txiptv
 CCTV2,http://42.225.117.174:11199/tsfile/live/0002_1.m3u8
 CCTV3,http://api.kkitv.itv888.cn:8080/hls/aikp69mli0d/index.m3u8
 CCTV3,http://sh.lnott.top:880/dx03.m3u8
@@ -28,11 +29,10 @@ CCTV5+,http://111.43.126.240:9003/hls/18/index.m3u8
 CCTV5+,http://58.19.180.108:9981/stream/channelid/1400754434?profile=pass
 CCTV6,http://api.kkitv.itv888.cn:8080/hls/tp9ajk4od5/index.m3u8
 CCTV6,http://sh.lnott.top:880/dx06.m3u8
-CCTV6,http://111.43.126.240:9003/hls/19/index.m3u8
 CCTV6,http://171.116.147.32:9003/hls/7/index.m3u8
 CCTV6,http://221.205.89.249:9003/hls/7/index.m3u8
+CCTV6,http://61.156.228.12:8154/tsfile/live/0006_1.m3u8?key=txiptv
 CCTV7,http://api.kkitv.itv888.cn:8080/hls/3udggaszi1i/index.m3u8
-CCTV7,http://sh.lnott.top:880/dx07.m3u8
 CCTV7,http://111.43.126.240:9003/hls/20/index.m3u8
 CCTV7,http://58.19.180.108:9981/stream/channelid/499001205?profile=pass
 CCTV8,http://api.kkitv.itv888.cn:8080/hls/vseo1nm7qp/index.m3u8
@@ -106,8 +106,8 @@ CCTV4K,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d862909db22
 山西卫视,http://ak6668768.zicp.io:8865/live1090.m3u8
 山东卫视,http://api.kkitv.itv888.cn:8080/hls/6gcdai13om5/index.m3u8
 山东卫视,http://hbhyjq.ufyct.com:1088/hls/39/index.m3u8
-山东卫视,http://hlsbkmgsplive.miguvideo.com/wd-shandonghd-600/index.m3u8?&encrypt=
 山东卫视,http://hlsbkmgsplive.miguvideo.com/wd-shandonghd-1200/index.m3u8?&encrypt=
+山东卫视,http://hlsbkmgsplive.miguvideo.com/wd-shandonghd-600/index.m3u8?&encrypt=
 山东卫视,http://221.0.78.26:881/hls/50217/index.m3u8
 安徽卫视,http://api.kkitv.itv888.cn:8080/hls/m8hvytneunk/index.m3u8
 安徽卫视,http://hbhyjq.ufyct.com:1088/hls/81/index.m3u8
@@ -144,7 +144,6 @@ CCTV4K,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d862909db22
 广东卫视,http://sh.lnott.top:880/dx40.m3u8
 广东卫视,http://hbhyjq.ufyct.com:1088/hls/82/index.m3u8
 广东卫视,http://1.195.131.68:9901/tsfile/live/0125_1.m3u8?key=txiptv
-广东卫视,https://h5cdn3.kylintv.tv/live/gdtvhd_iphone.m3u8
 深圳卫视,http://api.kkitv.itv888.cn:8080/hls/iftsd32ykm/index.m3u8
 深圳卫视,http://sh.lnott.top:880/dx61.m3u8
 深圳卫视,http://hbhyjq.ufyct.com:1088/hls/84/index.m3u8
@@ -169,20 +168,20 @@ CCTV4K,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d862909db22
 海南卫视,http://sh.lnott.top:880/dx58.m3u8
 海南卫视,http://ak6668768.zicp.io:8847/live1072.m3u8
 港澳频道,#genre#
-凤凰中文,https://stream1.freetv.fun/4e695e885cc20b20b7e3ec874fe52ed75e27443778c8ff29e498c4c9d7cec4a0.m3u8
-凤凰中文,https://stream1.freetv.fun/909e580b3dd181e5fa28b63945b4bfedd0ad26b48285ce4c581d92094cc37d15.m3u8
 凤凰中文,https://live.tvfix.org/live/fhzw/1/v4000000/index.m3u8
 凤凰中文,https://live.tvfix.org/live/fhzw/index.m3u8
+凤凰中文,https://stream1.freetv.fun/4e695e885cc20b20b7e3ec874fe52ed75e27443778c8ff29e498c4c9d7cec4a0.m3u8
+凤凰中文,https://stream1.freetv.fun/909e580b3dd181e5fa28b63945b4bfedd0ad26b48285ce4c581d92094cc37d15.m3u8
 凤凰中文,http://203.205.191.53/qctv.fengshows.cn/live/0701pcc72.m3u8
-凤凰资讯,https://stream1.freetv.fun/03b8b50959f71c9480228564b4fedbe3cd0927a427d0bc903059a5843cb7c4b6.m3u8
 凤凰资讯,https://live.tvfix.org/live/fwzx/index.m3u8
-凤凰资讯,http://203.205.191.53/qctv.fengshows.cn/live/0701pin72.flv
+凤凰资讯,https://stream1.freetv.fun/03b8b50959f71c9480228564b4fedbe3cd0927a427d0bc903059a5843cb7c4b6.m3u8
 凤凰资讯,http://203.205.191.53/qctv.fengshows.cn/live/0701pin72.m3u8
+凤凰资讯,http://203.205.191.53/qctv.fengshows.cn/live/0701pin72.flv
 凤凰资讯,http://61.221.215.25:8800/hls/47/index.m3u8
-翡翠台,http://php.jdshipin.com:8880/TVOD/iptv.php?id=fct
+翡翠台,https://live.tvfix.org/live/jade/index.m3u8
 翡翠台,http://php.jdshipin.com:8880/smt.php?id=jade_twn
+翡翠台,http://php.jdshipin.com:8880/TVOD/iptv.php?id=fct
 翡翠台,http://php.jdshipin.com:8880/TVOD/iptv.php?id=fct3
-翡翠台,https://epg.pw/stream/fe02817d95c6d58f41e1ea8208b5a8c9462bf525b153819b0c3918406127925a.m3u8
 CHC动作电影,http://sh.lnott.top:880/dx100.m3u8
 CHC动作电影,http://58.19.180.108:9981/stream/channelid/1782708396?profile=pass
 CHC家庭影院,http://sh.lnott.top:880/dx93.m3u8
@@ -195,10 +194,10 @@ CHC高清电影,http://58.19.180.108:9981/stream/channelid/473633391?profile=pas
 金鹰卡通,http://111.43.126.240:9003/hls/73/index.m3u8
 金鹰卡通,http://hbhyjq.ufyct.com:1088/hls/83/index.m3u8
 金鹰卡通,http://ak6668768.zicp.io:8857/live1060.m3u8
-金鹰卡通,https://k44991.kylintv.tv/live/jykt_iphone.m3u8
 嘉佳卡通,http://sh.lnott.top:880/dx67.m3u8
 嘉佳卡通,http://hbhyjq.ufyct.com:1088/hls/52/index.m3u8
 嘉佳卡通,http://ak6668768.zicp.io:8858/live1061.m3u8
 动漫秀场,http://sh.lnott.top:880/dx110.m3u8
 动漫秀场,https://stream1.freetv.fun/670c5b1cdfb0effab6e9e09e5c82afcbe22528940ea1c58836e288e4f4bafb03.m3u8
+哈哈炫动,http://sh.lnott.top:880/dx89.m3u8
 五星体育,https://gdcucc.v1.mk/gdcucc/wxty.m3u8
