@@ -1,5 +1,5 @@
 央视频道,#genre#
-更新时间(2025-09-12 06:31),http://171.116.147.32:9003/hls/1/index.m3u8
+更新时间(2025-09-12 16:33),http://api.kkitv.itv888.cn:8080/hls/f5fuln3kthe/index.m3u8
 CCTV1,http://api.kkitv.itv888.cn:8080/hls/f5fuln3kthe/index.m3u8
 CCTV1,http://171.116.147.32:9003/hls/1/index.m3u8
 CCTV1,http://171.116.254.224:9003/hls/1/index.m3u8
@@ -33,13 +33,17 @@ CCTV6,http://171.116.147.32:9003/hls/7/index.m3u8
 CCTV6,http://221.205.89.249:9003/hls/7/index.m3u8
 CCTV6,http://61.156.228.12:8154/tsfile/live/0006_1.m3u8?key=txiptv
 CCTV7,http://api.kkitv.itv888.cn:8080/hls/3udggaszi1i/index.m3u8
+CCTV7,http://sh.lnott.top:880/dx07.m3u8
 CCTV7,http://111.43.126.240:9003/hls/20/index.m3u8
+CCTV7,http://58.19.180.108:9981/stream/channelid/499001205?profile=pass
 CCTV8,http://api.kkitv.itv888.cn:8080/hls/vseo1nm7qp/index.m3u8
 CCTV8,http://sh.lnott.top:880/dx08.m3u8
 CCTV8,http://111.43.126.240:9003/hls/21/index.m3u8
+CCTV8,http://58.19.180.108:9981/stream/channelid/1123874386?profile=pass
 CCTV9,http://api.kkitv.itv888.cn:8080/hls/bsmkmf3jrp4/index.m3u8
 CCTV9,http://sh.lnott.top:880/dx09.m3u8
 CCTV9,http://111.43.126.240:9003/hls/22/index.m3u8
+CCTV9,http://58.19.180.108:9981/stream/channelid/1681394297?profile=pass
 CCTV10,http://api.kkitv.itv888.cn:8080/hls/wd86wxjxn8/index.m3u8
 CCTV10,http://sh.lnott.top:880/dx10.m3u8
 CCTV11,http://api.kkitv.itv888.cn:8080/hls/og4kq4cnqm/index.m3u8
@@ -50,6 +54,7 @@ CCTV11,http://58.19.180.108:9981/stream/channelid/550290687?profile=pass
 CCTV12,http://api.kkitv.itv888.cn:8080/hls/nwfb31kwc3l/index.m3u8
 CCTV12,http://sh.lnott.top:880/dx12.m3u8
 CCTV12,http://111.43.126.240:9003/hls/25/index.m3u8
+CCTV12,http://58.19.180.108:9981/stream/channelid/857624678?profile=pass
 CCTV13,http://api.kkitv.itv888.cn:8080/hls/9sxg4yjgot/index.m3u8
 CCTV13,http://111.43.126.240:9003/hls/26/index.m3u8
 CCTV13,http://221.205.89.249:9003/hls/14/index.m3u8
@@ -68,11 +73,11 @@ CCTV16,http://183.184.62.41:9003/hls/17/index.m3u8
 CCTV17,http://api.kkitv.itv888.cn:8080/hls/5t4bgijh9da/index.m3u8
 CCTV17,http://sh.lnott.top:880/dx17.m3u8
 CCTV17,http://111.43.126.240:9003/hls/30/index.m3u8
-CCTV4K,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d862909db2279d3b3387cd9c.m3u8
 卫视频道,#genre#
 北京卫视,http://api.kkitv.itv888.cn:8080/hls/h5uud1z84gn/index.m3u8
 东方卫视,http://api.kkitv.itv888.cn:8080/hls/p269fvbehye/index.m3u8
 东方卫视,http://sh.lnott.top:880/dx35.m3u8
+东方卫视,http://111.43.126.240:9003/hls/39/index.m3u8
 东方卫视,https://live.tvfix.org/live/dfhd/index.m3u8
 天津卫视,http://api.kkitv.itv888.cn:8080/hls/z2lkdkrb4w/index.m3u8
 天津卫视,http://hbhyjq.ufyct.com:1088/hls/33/index.m3u8
@@ -139,6 +144,7 @@ CCTV4K,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d862909db22
 广东卫视,http://api.kkitv.itv888.cn:8080/hls/qr6872071g/index.m3u8
 广东卫视,http://sh.lnott.top:880/dx40.m3u8
 广东卫视,http://hbhyjq.ufyct.com:1088/hls/82/index.m3u8
+广东卫视,http://1.195.131.68:9901/tsfile/live/0125_1.m3u8?key=txiptv
 广东卫视,https://h5cdn3.kylintv.tv/live/gdtvhd_iphone.m3u8
 深圳卫视,http://api.kkitv.itv888.cn:8080/hls/iftsd32ykm/index.m3u8
 深圳卫视,http://sh.lnott.top:880/dx61.m3u8
@@ -164,8 +170,8 @@ CCTV4K,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d862909db22
 海南卫视,http://sh.lnott.top:880/dx58.m3u8
 海南卫视,http://ak6668768.zicp.io:8847/live1072.m3u8
 港澳频道,#genre#
-凤凰中文,https://live.tvfix.org/live/fhzw/index.m3u8
 凤凰中文,https://live.tvfix.org/live/fhzw/1/v4000000/index.m3u8
+凤凰中文,https://live.tvfix.org/live/fhzw/index.m3u8
 凤凰中文,http://203.205.191.53/qctv.fengshows.cn/live/0701pcc72.m3u8
 凤凰中文,https://stream1.freetv.fun/4e695e885cc20b20b7e3ec874fe52ed75e27443778c8ff29e498c4c9d7cec4a0.m3u8
 凤凰中文,https://stream1.freetv.fun/909e580b3dd181e5fa28b63945b4bfedd0ad26b48285ce4c581d92094cc37d15.m3u8
@@ -179,11 +185,9 @@ CCTV4K,https://epg.pw/stream/14061ea886df6edfb76d8015ef8df852acbce8d4d862909db22
 翡翠台,http://php.jdshipin.com:8880/smt.php?id=jade_twn
 翡翠台,https://epg.pw/stream/fe02817d95c6d58f41e1ea8208b5a8c9462bf525b153819b0c3918406127925a.m3u8
 CHC动作电影,http://sh.lnott.top:880/dx100.m3u8
-CHC动作电影,http://58.19.180.108:9981/stream/channelid/1782708396?profile=pass
 CHC家庭影院,http://sh.lnott.top:880/dx93.m3u8
 CHC家庭影院,http://ak6668768.zicp.io:8844/live1046.m3u8
 CHC家庭影院,http://58.19.180.108:9981/stream/channelid/2141017443?profile=pass
-CHC高清电影,http://58.19.180.108:9981/stream/channelid/473633391?profile=pass
 地方数字,#genre#
 卡酷少儿,http://111.43.126.240:9003/hls/71/index.m3u8
 金鹰卡通,http://sh.lnott.top:880/dx88.m3u8
