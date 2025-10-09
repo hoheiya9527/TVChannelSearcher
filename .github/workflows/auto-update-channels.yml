@@ -121,7 +121,7 @@ jobs:
       if: env.QUALITY_CHECK == 'true' && env.HAS_CHANGES == 'true'
       run: |
         git add result.txt
-        git commit -m "🔄 自动更新IPTV频道列表 - ${{ env.VALID_CHANNELS }}个频道，${{ env.GROUPS }}个分组"
+        git commit -m "🔄 自动更新IPTV频道列表 - ${{ env.VALID_CHANNELS }}个频道链接"
         git push
     
     - name: 质量检查失败处理
