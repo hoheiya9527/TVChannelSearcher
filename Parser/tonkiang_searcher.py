@@ -113,7 +113,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
         # 设置更完整的请求头，模拟真实浏览器，增加随机化
         base_headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language': 'en-US,en;q=0.9',
+            'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
             'Cache-Control': random.choice(['no-cache', 'max-age=0']),
             'DNT': '1',
@@ -217,14 +217,14 @@ class TonkiangSearcher(BaseIPTVSearcher):
                 del self.session.headers['Referer']
         
         # 随机更新其他请求头
-        if random.random() < 0.2:  # 20%的概率更新Accept-Language
-            languages = [
-                'en-US,en;q=0.9',
-                'en-US,en;q=0.9,de;q=0.8',
-                'en-GB,en-US;q=0.9,en;q=0.8',
-                'en-US,en;q=0.9,fr;q=0.8',
-            ]
-            self.session.headers['Accept-Language'] = random.choice(languages)
+        # if random.random() < 0.2:  # 20%的概率更新Accept-Language
+        #     languages = [
+        #         'en-US,en;q=0.9',
+        #         'en-US,en;q=0.9,de;q=0.8',
+        #         'en-GB,en-US;q=0.9,en;q=0.8',
+        #         'en-US,en;q=0.9,fr;q=0.8',
+        #     ]
+        #     self.session.headers['Accept-Language'] = random.choice(languages)
         
         # 随机设置屏幕分辨率相关头（某些网站会检查）
         if random.random() < 0.1:  # 10%的概率
@@ -298,7 +298,7 @@ class TonkiangSearcher(BaseIPTVSearcher):
                 if page == 1:
                     # 第一页：POST请求
                     search_url = f"{base_url}/"
-                    search_data = {'seerch': keyword}
+                    search_data = {'seerch': keyword,"city":"1fbc76e812"}
                     response = self.session.post(
                         search_url,
                         data=search_data,
